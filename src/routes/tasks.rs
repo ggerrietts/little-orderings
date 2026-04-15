@@ -18,17 +18,7 @@ use crate::{
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async fn project_id_for_task(pool: &sqlx::SqlitePool, task_id: i64) -> Result<i64, AppError> {
-    let row: Option<(i64,)> = sqlx::query_as(
-        "SELECT m.project_id FROM tasks t
-         JOIN milestones m ON m.id = t.milestone_id
-         WHERE t.id = ?",
-    )
-    .bind(task_id)
-    .fetch_optional(pool)
-    .await?;
-    row.map(|(id,)| id).ok_or(AppError::NotFound)
-}
+use crate::routes::helpers::{project_id_for_milestone, project_id_for_task};
 
 async fn get_full_task(
     pool: &sqlx::SqlitePool,
@@ -64,7 +54,7 @@ pub async fn list_tasks(
     Path(milestone_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id =
-        crate::routes::milestones::project_id_for_milestone(&state.pool, milestone_id).await?;
+        project_id_for_milestone(&state.pool, milestone_id).await?;
     crate::auth::require_member(&state.pool, project_id, user.id).await?;
 
     let tasks: Vec<Task> = sqlx::query_as(
@@ -76,6 +66,8 @@ pub async fn list_tasks(
     .fetch_all(&state.pool)
     .await?;
 
+    // Early return required: IN () with an empty list is invalid SQL, so the
+    // batch assignee fetch below must not be reached when there are no tasks.
     if tasks.is_empty() {
         return Ok(Json(Vec::<TaskWithAssignees>::new()));
     }
@@ -121,7 +113,7 @@ pub async fn create_task(
     Json(payload): Json<CreateTaskRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id =
-        crate::routes::milestones::project_id_for_milestone(&state.pool, milestone_id).await?;
+        project_id_for_milestone(&state.pool, milestone_id).await?;
     crate::auth::require_member(&state.pool, project_id, user.id).await?;
 
     let priority = payload.priority.as_deref().unwrap_or("normal");
@@ -241,6 +233,8 @@ pub async fn unassign_user(
     let project_id = project_id_for_task(&state.pool, task_id).await?;
     crate::auth::require_member(&state.pool, project_id, user.id).await?;
 
+    // Intentionally idempotent: unassigning a user who was never assigned
+    // returns 204 rather than 404, matching REST convention for DELETE.
     sqlx::query("DELETE FROM task_assignments WHERE task_id = ? AND user_id = ?")
         .bind(task_id)
         .bind(target_user_id)
@@ -270,7 +264,7 @@ pub async fn reorder_task(
 
     // Ensure the destination milestone belongs to the same project.
     let dest_project_id =
-        crate::routes::milestones::project_id_for_milestone(&state.pool, new_milestone_id).await?;
+        project_id_for_milestone(&state.pool, new_milestone_id).await?;
     if dest_project_id != project_id {
         return Err(AppError::Forbidden);
     }
@@ -304,8 +298,12 @@ pub async fn reorder_task(
     .execute(&mut *tx)
     .await?;
 
-    // Renumber every task in the new milestone.
+    // Renumber every task in the new milestone. Skip the moved task itself —
+    // its sort_order was already set in the UPDATE above.
     for (i, id) in new_ids.iter().enumerate() {
+        if *id == task_id {
+            continue;
+        }
         sqlx::query("UPDATE tasks SET sort_order = ? WHERE id = ?")
             .bind(i as i64)
             .bind(id)

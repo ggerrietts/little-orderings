@@ -175,7 +175,7 @@ pub async fn list_members(
          FROM project_members pm
          JOIN users u ON u.id = pm.user_id
          WHERE pm.project_id = ?
-         ORDER BY pm.role DESC, u.username",
+         ORDER BY CASE pm.role WHEN 'owner' THEN 0 WHEN 'member' THEN 1 ELSE 2 END, u.username",
     )
     .bind(project_id)
     .fetch_all(&state.pool)
