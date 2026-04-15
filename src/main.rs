@@ -4,7 +4,11 @@ mod error;
 mod models;
 mod routes;
 
-use axum::{routing::get, Router};
+use axum::{
+    http::{header, HeaderValue, Method},
+    routing::get,
+    Router,
+};
 use sqlx::SqlitePool;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -35,10 +39,17 @@ async fn main() {
 
     let state = AppState { pool };
 
+    let allowed_origin = std::env::var("ALLOWED_ORIGIN")
+        .unwrap_or_else(|_| "http://localhost:5173".to_string());
     let cors = CorsLayer::new()
-        .allow_origin(tower_http::cors::Any)
-        .allow_methods(tower_http::cors::Any)
-        .allow_headers(tower_http::cors::Any);
+        .allow_origin(
+            allowed_origin
+                .parse::<HeaderValue>()
+                .expect("Invalid ALLOWED_ORIGIN"),
+        )
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+        .allow_headers([header::CONTENT_TYPE, header::COOKIE])
+        .allow_credentials(true);
 
     let app = Router::new()
         .route("/health", get(health))

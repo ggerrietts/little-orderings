@@ -85,9 +85,10 @@ pub async fn login(
     .execute(&state.pool)
     .await?;
 
+    let secure = if cfg!(debug_assertions) { "" } else { "; Secure" };
     let cookie = format!(
-        "session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800",
-        session_id
+        "session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800{}",
+        session_id, secure
     );
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -163,7 +164,12 @@ pub async fn register(
     Ok((StatusCode::CREATED, Json(user)))
 }
 
-/// Returns the user's role in the project, or 404 if not a member.
+/// Returns the user's role in the project, or **404** if not a member.
+///
+/// Deliberately returns 404 rather than 403 to avoid leaking whether a
+/// project exists to users who are not members (security through obscurity).
+/// Callers that need to distinguish "not a member" from "not found" must do
+/// so at a higher level.
 pub async fn require_member(
     pool: &SqlitePool,
     project_id: i64,

@@ -263,6 +263,13 @@ pub async fn reorder_task(
 
     let new_milestone_id = payload.milestone_id;
 
+    // Ensure the destination milestone belongs to the same project.
+    let dest_project_id =
+        crate::routes::milestones::project_id_for_milestone(&state.pool, new_milestone_id).await?;
+    if dest_project_id != project_id {
+        return Err(AppError::Forbidden);
+    }
+
     // --- Reorder the new milestone ---
     // Fetch task IDs in the destination milestone (excluding the moved task), in current order.
     let mut new_ids: Vec<i64> = sqlx::query_as(

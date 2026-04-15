@@ -6,7 +6,8 @@ pub async fn init() -> SqlitePool {
 
     let options = SqliteConnectOptions::from_str(&database_url)
         .expect("Invalid DATABASE_URL")
-        .create_if_missing(true);
+        .create_if_missing(true)
+        .pragma("foreign_keys", "ON");
 
     let pool = SqlitePool::connect_with(options)
         .await
