@@ -72,11 +72,13 @@ pub async fn create_milestone(
 ) -> Result<impl IntoResponse, AppError> {
     crate::auth::require_member(&state.pool, project_id, user.id).await?;
 
+    let mut tx = state.pool.begin().await?;
+
     let (next_order,): (i64,) = sqlx::query_as(
         "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM milestones WHERE project_id = ?",
     )
     .bind(project_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await?;
 
     let result = sqlx::query(
@@ -89,10 +91,13 @@ pub async fn create_milestone(
     .bind(&payload.target_date)
     .bind(&payload.due_date)
     .bind(next_order)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
 
-    let milestone = fetch_milestone(&state.pool, result.last_insert_rowid()).await?;
+    let milestone_id = result.last_insert_rowid();
+    tx.commit().await?;
+
+    let milestone = fetch_milestone(&state.pool, milestone_id).await?;
     Ok((StatusCode::CREATED, Json(milestone)))
 }
 
@@ -152,13 +157,15 @@ pub async fn reorder_milestone(
     let project_id = project_id_for_milestone(&state.pool, milestone_id).await?;
     crate::auth::require_member(&state.pool, project_id, user.id).await?;
 
+    let mut tx = state.pool.begin().await?;
+
     // Fetch all milestone IDs in this project (except the one being moved), in current order.
     let mut ids: Vec<i64> = sqlx::query_as(
         "SELECT id FROM milestones WHERE project_id = ? AND id != ? ORDER BY sort_order, id",
     )
     .bind(project_id)
     .bind(milestone_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut *tx)
     .await?
     .into_iter()
     .map(|(id,)| id)
@@ -173,9 +180,11 @@ pub async fn reorder_milestone(
         sqlx::query("UPDATE milestones SET sort_order = ? WHERE id = ?")
             .bind(i as i64)
             .bind(id)
-            .execute(&state.pool)
+            .execute(&mut *tx)
             .await?;
     }
+
+    tx.commit().await?;
 
     // Return the full refreshed list so the frontend can update in one round-trip.
     let milestones: Vec<MilestoneSummary> = sqlx::query_as(

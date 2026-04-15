@@ -44,6 +44,8 @@ pub async fn create_project(
     State(state): State<AppState>,
     Json(payload): Json<CreateProjectRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    let mut tx = state.pool.begin().await?;
+
     let result = sqlx::query(
         "INSERT INTO projects (name, description, owner_id, target_date) VALUES (?, ?, ?, ?)",
     )
@@ -51,7 +53,7 @@ pub async fn create_project(
     .bind(&payload.description)
     .bind(user.id)
     .bind(&payload.target_date)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
 
     let project_id = result.last_insert_rowid();
@@ -61,8 +63,10 @@ pub async fn create_project(
     )
     .bind(project_id)
     .bind(user.id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     let project: Project = sqlx::query_as(
         "SELECT id, name, description, owner_id, status, target_date, created_at, updated_at
@@ -219,38 +223,36 @@ pub async fn remove_member(
 ) -> Result<impl IntoResponse, AppError> {
     crate::auth::require_owner(&state.pool, project_id, user.id).await?;
 
-    // Fetch the role of the member being removed.
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT role FROM project_members WHERE project_id = ? AND user_id = ?",
+    // Atomically delete the member unless they are the last owner, avoiding a
+    // TOCTOU race between the "is last owner?" check and the DELETE.
+    let result = sqlx::query(
+        "DELETE FROM project_members
+         WHERE project_id = ? AND user_id = ?
+           AND (role != 'owner'
+                OR (SELECT COUNT(*) FROM project_members
+                    WHERE project_id = ? AND role = 'owner') > 1)",
     )
     .bind(project_id)
     .bind(member_user_id)
-    .fetch_optional(&state.pool)
+    .bind(project_id)
+    .execute(&state.pool)
     .await?;
 
-    let role = row.ok_or(AppError::NotFound)?.0;
-
-    // Prevent removing the last owner.
-    if role == "owner" {
-        let (other_owners,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM project_members
-             WHERE project_id = ? AND role = 'owner' AND user_id != ?",
+    if result.rows_affected() == 0 {
+        // Either the member doesn't exist or they're the last owner.
+        let exists: Option<(i64,)> = sqlx::query_as(
+            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
         )
         .bind(project_id)
         .bind(member_user_id)
-        .fetch_one(&state.pool)
+        .fetch_optional(&state.pool)
         .await?;
-
-        if other_owners == 0 {
-            return Err(AppError::Forbidden);
-        }
+        return Err(if exists.is_some() {
+            AppError::Forbidden // last owner — cannot remove
+        } else {
+            AppError::NotFound
+        });
     }
-
-    sqlx::query("DELETE FROM project_members WHERE project_id = ? AND user_id = ?")
-        .bind(project_id)
-        .bind(member_user_id)
-        .execute(&state.pool)
-        .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

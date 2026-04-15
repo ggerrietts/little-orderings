@@ -126,11 +126,13 @@ pub async fn create_task(
 
     let priority = payload.priority.as_deref().unwrap_or("normal");
 
+    let mut tx = state.pool.begin().await?;
+
     let (next_order,): (i64,) = sqlx::query_as(
         "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tasks WHERE milestone_id = ?",
     )
     .bind(milestone_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await?;
 
     let result = sqlx::query(
@@ -144,10 +146,13 @@ pub async fn create_task(
     .bind(&payload.due_date)
     .bind(next_order)
     .bind(user.id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
 
-    let task = get_full_task(&state.pool, result.last_insert_rowid()).await?;
+    let task_id = result.last_insert_rowid();
+    tx.commit().await?;
+
+    let task = get_full_task(&state.pool, task_id).await?;
     Ok((StatusCode::CREATED, Json(task)))
 }
 
@@ -270,6 +275,8 @@ pub async fn reorder_task(
         return Err(AppError::Forbidden);
     }
 
+    let mut tx = state.pool.begin().await?;
+
     // --- Reorder the new milestone ---
     // Fetch task IDs in the destination milestone (excluding the moved task), in current order.
     let mut new_ids: Vec<i64> = sqlx::query_as(
@@ -277,7 +284,7 @@ pub async fn reorder_task(
     )
     .bind(new_milestone_id)
     .bind(task_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut *tx)
     .await?
     .into_iter()
     .map(|(id,)| id)
@@ -294,7 +301,7 @@ pub async fn reorder_task(
     .bind(new_milestone_id)
     .bind(pos as i64)
     .bind(task_id)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
 
     // Renumber every task in the new milestone.
@@ -302,7 +309,7 @@ pub async fn reorder_task(
         sqlx::query("UPDATE tasks SET sort_order = ? WHERE id = ?")
             .bind(i as i64)
             .bind(id)
-            .execute(&state.pool)
+            .execute(&mut *tx)
             .await?;
     }
 
@@ -312,17 +319,19 @@ pub async fn reorder_task(
             "SELECT id FROM tasks WHERE milestone_id = ? ORDER BY sort_order, id",
         )
         .bind(old_milestone_id)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut *tx)
         .await?;
 
         for (i, (id,)) in old_ids.iter().enumerate() {
             sqlx::query("UPDATE tasks SET sort_order = ? WHERE id = ?")
                 .bind(i as i64)
                 .bind(id)
-                .execute(&state.pool)
+                .execute(&mut *tx)
                 .await?;
         }
     }
+
+    tx.commit().await?;
 
     Ok(Json(get_full_task(&state.pool, task_id).await?))
 }
