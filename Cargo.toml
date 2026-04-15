@@ -1,0 +1,24 @@
+[package]
+name = "plan-mine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7", features = ["macros"] }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "migrate", "time"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "cors", "fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+argon2 = "0.5"
+uuid = { version = "1", features = ["v4"] }
+time = { version = "0.3", features = ["serde"] }
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+rand = "0.8"
+
+[dev-dependencies]
+ts-rs = { version = "10", features = ["serde-compat"] }
