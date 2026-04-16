@@ -186,6 +186,21 @@ pub async fn require_member(
     row.map(|(r,)| r).ok_or(AppError::NotFound)
 }
 
+/// Errors with 404 if not a member, 403 if a member but not a writer (owner or member role).
+///
+/// Viewers are read-only: they pass `require_member` but are rejected here.
+pub async fn require_writer(
+    pool: &SqlitePool,
+    project_id: i64,
+    user_id: i64,
+) -> Result<(), AppError> {
+    let role = require_member(pool, project_id, user_id).await?;
+    if role == "viewer" {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
+}
+
 /// Errors with 404 if not a member, 403 if a member but not owner.
 pub async fn require_owner(
     pool: &SqlitePool,

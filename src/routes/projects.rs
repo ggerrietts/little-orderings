@@ -4,12 +4,13 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use sqlx::QueryBuilder;
 
 use crate::{
     auth::AuthUser,
     error::AppError,
     models::{
-        AddMemberRequest, CreateProjectRequest, MilestoneSummary, Project, ProjectDetail,
+        AddMemberRequest, CreateProjectRequest, MilestoneSummary, Patch, Project, ProjectDetail,
         ProjectListItem, ProjectMember, UpdateProjectRequest,
     },
     AppState,
@@ -20,7 +21,7 @@ pub async fn list_projects(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, AppError> {
     let projects: Vec<ProjectListItem> = sqlx::query_as(
-        "SELECT p.id, p.name, p.description, p.owner_id, p.status, p.target_date,
+        "SELECT p.id, p.name, p.description, p.status, p.target_date,
                 p.created_at, p.updated_at,
                 (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) as member_count,
                 (SELECT COUNT(*) FROM tasks t
@@ -47,11 +48,10 @@ pub async fn create_project(
     let mut tx = state.pool.begin().await?;
 
     let result = sqlx::query(
-        "INSERT INTO projects (name, description, owner_id, target_date) VALUES (?, ?, ?, ?)",
+        "INSERT INTO projects (name, description, target_date) VALUES (?, ?, ?)",
     )
     .bind(&payload.name)
     .bind(&payload.description)
-    .bind(user.id)
     .bind(&payload.target_date)
     .execute(&mut *tx)
     .await?;
@@ -69,7 +69,7 @@ pub async fn create_project(
     tx.commit().await?;
 
     let project: Project = sqlx::query_as(
-        "SELECT id, name, description, owner_id, status, target_date, created_at, updated_at
+        "SELECT id, name, description, status, target_date, created_at, updated_at
          FROM projects WHERE id = ?",
     )
     .bind(project_id)
@@ -87,7 +87,7 @@ pub async fn get_project(
     crate::auth::require_member(&state.pool, project_id, user.id).await?;
 
     let project: Project = sqlx::query_as(
-        "SELECT id, name, description, owner_id, status, target_date, created_at, updated_at
+        "SELECT id, name, description, status, target_date, created_at, updated_at
          FROM projects WHERE id = ?",
     )
     .bind(project_id)
@@ -115,28 +115,32 @@ pub async fn update_project(
     Path(project_id): Path<i64>,
     Json(payload): Json<UpdateProjectRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
-    // COALESCE: if caller omits a field (None → SQL NULL), keep the existing value.
-    sqlx::query(
-        "UPDATE projects
-         SET name        = COALESCE(?, name),
-             description = COALESCE(?, description),
-             target_date = COALESCE(?, target_date),
-             status      = COALESCE(?, status),
-             updated_at  = CURRENT_TIMESTAMP
-         WHERE id = ?",
-    )
-    .bind(&payload.name)
-    .bind(&payload.description)
-    .bind(&payload.target_date)
-    .bind(&payload.status)
-    .bind(project_id)
-    .execute(&state.pool)
-    .await?;
+    let mut qb = QueryBuilder::<sqlx::Sqlite>::new(
+        "UPDATE projects SET updated_at = CURRENT_TIMESTAMP",
+    );
+    if let Some(ref v) = payload.name {
+        qb.push(", name = ").push_bind(v);
+    }
+    match &payload.description {
+        Patch::Value(v) => { qb.push(", description = ").push_bind(v); }
+        Patch::Null => { qb.push(", description = NULL"); }
+        Patch::Missing => {}
+    }
+    match &payload.target_date {
+        Patch::Value(v) => { qb.push(", target_date = ").push_bind(v); }
+        Patch::Null => { qb.push(", target_date = NULL"); }
+        Patch::Missing => {}
+    }
+    if let Some(ref v) = payload.status {
+        qb.push(", status = ").push_bind(v.as_str());
+    }
+    qb.push(" WHERE id = ").push_bind(project_id);
+    qb.build().execute(&state.pool).await?;
 
     let project: Project = sqlx::query_as(
-        "SELECT id, name, description, owner_id, status, target_date, created_at, updated_at
+        "SELECT id, name, description, status, target_date, created_at, updated_at
          FROM projects WHERE id = ?",
     )
     .bind(project_id)
@@ -256,4 +260,3 @@ pub async fn remove_member(
 
     Ok(StatusCode::NO_CONTENT)
 }
-

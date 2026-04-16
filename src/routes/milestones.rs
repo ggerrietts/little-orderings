@@ -5,10 +5,12 @@ use axum::{
     Json,
 };
 
+use sqlx::QueryBuilder;
+
 use crate::{
     auth::AuthUser,
     error::AppError,
-    models::{CreateMilestoneRequest, MilestoneSummary, ReorderMilestoneRequest, UpdateMilestoneRequest},
+    models::{CreateMilestoneRequest, MilestoneSummary, Patch, ReorderMilestoneRequest, UpdateMilestoneRequest},
     AppState,
 };
 
@@ -60,7 +62,7 @@ pub async fn create_milestone(
     Path(project_id): Path<i64>,
     Json(payload): Json<CreateMilestoneRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
     let mut tx = state.pool.begin().await?;
 
@@ -98,26 +100,34 @@ pub async fn update_milestone(
     Json(payload): Json<UpdateMilestoneRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_milestone(&state.pool, milestone_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
-    sqlx::query(
-        "UPDATE milestones
-         SET name        = COALESCE(?, name),
-             description = COALESCE(?, description),
-             status      = COALESCE(?, status),
-             target_date = COALESCE(?, target_date),
-             due_date    = COALESCE(?, due_date),
-             updated_at  = CURRENT_TIMESTAMP
-         WHERE id = ?",
-    )
-    .bind(&payload.name)
-    .bind(&payload.description)
-    .bind(&payload.status)
-    .bind(&payload.target_date)
-    .bind(&payload.due_date)
-    .bind(milestone_id)
-    .execute(&state.pool)
-    .await?;
+    let mut qb = QueryBuilder::<sqlx::Sqlite>::new(
+        "UPDATE milestones SET updated_at = CURRENT_TIMESTAMP",
+    );
+    if let Some(ref v) = payload.name {
+        qb.push(", name = ").push_bind(v);
+    }
+    match &payload.description {
+        Patch::Value(v) => { qb.push(", description = ").push_bind(v); }
+        Patch::Null => { qb.push(", description = NULL"); }
+        Patch::Missing => {}
+    }
+    if let Some(ref v) = payload.status {
+        qb.push(", status = ").push_bind(v.as_str());
+    }
+    match &payload.target_date {
+        Patch::Value(v) => { qb.push(", target_date = ").push_bind(v); }
+        Patch::Null => { qb.push(", target_date = NULL"); }
+        Patch::Missing => {}
+    }
+    match &payload.due_date {
+        Patch::Value(v) => { qb.push(", due_date = ").push_bind(v); }
+        Patch::Null => { qb.push(", due_date = NULL"); }
+        Patch::Missing => {}
+    }
+    qb.push(" WHERE id = ").push_bind(milestone_id);
+    qb.build().execute(&state.pool).await?;
 
     Ok(Json(fetch_milestone(&state.pool, milestone_id).await?))
 }
@@ -128,7 +138,7 @@ pub async fn delete_milestone(
     Path(milestone_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_milestone(&state.pool, milestone_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
     sqlx::query("DELETE FROM milestones WHERE id = ?")
         .bind(milestone_id)
@@ -145,7 +155,7 @@ pub async fn reorder_milestone(
     Json(payload): Json<ReorderMilestoneRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_milestone(&state.pool, milestone_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
     let mut tx = state.pool.begin().await?;
 

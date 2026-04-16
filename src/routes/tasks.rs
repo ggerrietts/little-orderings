@@ -4,14 +4,15 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use sqlx::QueryBuilder;
 use std::collections::HashMap;
 
 use crate::{
     auth::AuthUser,
     error::AppError,
     models::{
-        Assignee, AssignRequest, CreateTaskRequest, ReorderTaskRequest, Task, TaskWithAssignees,
-        UpdateTaskRequest,
+        Assignee, AssignRequest, CreateTaskRequest, Patch, ReorderTaskRequest, Task,
+        TaskWithAssignees, UpdateTaskRequest,
     },
     AppState,
 };
@@ -114,9 +115,9 @@ pub async fn create_task(
 ) -> Result<impl IntoResponse, AppError> {
     let project_id =
         project_id_for_milestone(&state.pool, milestone_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
-    let priority = payload.priority.as_deref().unwrap_or("normal");
+    let priority = payload.priority.as_ref().map(|p| p.as_str()).unwrap_or("normal");
 
     let mut tx = state.pool.begin().await?;
 
@@ -155,26 +156,32 @@ pub async fn update_task(
     Json(payload): Json<UpdateTaskRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_task(&state.pool, task_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
-    sqlx::query(
-        "UPDATE tasks
-         SET title       = COALESCE(?, title),
-             description = COALESCE(?, description),
-             status      = COALESCE(?, status),
-             priority    = COALESCE(?, priority),
-             due_date    = COALESCE(?, due_date),
-             updated_at  = CURRENT_TIMESTAMP
-         WHERE id = ?",
-    )
-    .bind(&payload.title)
-    .bind(&payload.description)
-    .bind(&payload.status)
-    .bind(&payload.priority)
-    .bind(&payload.due_date)
-    .bind(task_id)
-    .execute(&state.pool)
-    .await?;
+    let mut qb = QueryBuilder::<sqlx::Sqlite>::new(
+        "UPDATE tasks SET updated_at = CURRENT_TIMESTAMP",
+    );
+    if let Some(ref v) = payload.title {
+        qb.push(", title = ").push_bind(v);
+    }
+    match &payload.description {
+        Patch::Value(v) => { qb.push(", description = ").push_bind(v); }
+        Patch::Null => { qb.push(", description = NULL"); }
+        Patch::Missing => {}
+    }
+    if let Some(ref v) = payload.status {
+        qb.push(", status = ").push_bind(v.as_str());
+    }
+    if let Some(ref v) = payload.priority {
+        qb.push(", priority = ").push_bind(v.as_str());
+    }
+    match &payload.due_date {
+        Patch::Value(v) => { qb.push(", due_date = ").push_bind(v); }
+        Patch::Null => { qb.push(", due_date = NULL"); }
+        Patch::Missing => {}
+    }
+    qb.push(" WHERE id = ").push_bind(task_id);
+    qb.build().execute(&state.pool).await?;
 
     Ok(Json(get_full_task(&state.pool, task_id).await?))
 }
@@ -185,7 +192,7 @@ pub async fn delete_task(
     Path(task_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_task(&state.pool, task_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
     sqlx::query("DELETE FROM tasks WHERE id = ?")
         .bind(task_id)
@@ -202,7 +209,7 @@ pub async fn assign_user(
     Json(payload): Json<AssignRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_task(&state.pool, task_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
     // The assignee must also be a project member.
     crate::auth::require_member(&state.pool, project_id, payload.user_id)
@@ -231,7 +238,7 @@ pub async fn unassign_user(
     Path((task_id, target_user_id)): Path<(i64, i64)>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_task(&state.pool, task_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
     // Intentionally idempotent: unassigning a user who was never assigned
     // returns 204 rather than 404, matching REST convention for DELETE.
@@ -251,7 +258,7 @@ pub async fn reorder_task(
     Json(payload): Json<ReorderTaskRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_task(&state.pool, task_id).await?;
-    crate::auth::require_member(&state.pool, project_id, user.id).await?;
+    crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
     // Capture the old milestone before we move the task.
     let (old_milestone_id,): (i64,) =
