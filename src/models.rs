@@ -4,9 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 /// Tri-state value for PATCH request fields.
 ///
-/// Use `#[serde(default)]` on fields of this type so that a missing JSON key
-/// deserializes to `Patch::Missing` (via the `Default` impl) rather than
-/// causing a parse error.
+/// Use `#[serde(default)]` on fields of this type in request structs.
 ///
 /// | JSON                | Variant          | Effect on DB column  |
 /// |---------------------|------------------|----------------------|
@@ -33,6 +31,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Patch<T> {
 // ── Status / priority enums ───────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectStatus {
     Active,
@@ -49,6 +49,8 @@ impl ProjectStatus {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum MilestoneStatus {
     Open,
@@ -69,6 +71,8 @@ impl MilestoneStatus {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Todo,
@@ -91,6 +95,8 @@ impl TaskStatus {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum TaskPriority {
     Low,
@@ -113,7 +119,10 @@ impl TaskPriority {
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct Project {
+    #[cfg_attr(test, ts(type = "number"))]
     pub id: i64,
     pub name: String,
     pub description: Option<String>,
@@ -125,7 +134,10 @@ pub struct Project {
 
 /// List view: project + aggregate counts from subqueries.
 #[derive(Debug, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ProjectListItem {
+    #[cfg_attr(test, ts(type = "number"))]
     pub id: i64,
     pub name: String,
     pub description: Option<String>,
@@ -133,12 +145,16 @@ pub struct ProjectListItem {
     pub target_date: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    #[cfg_attr(test, ts(type = "number"))]
     pub member_count: i64,
+    #[cfg_attr(test, ts(type = "number"))]
     pub open_task_count: i64,
 }
 
 /// Detail view: project + its milestones.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ProjectDetail {
     #[serde(flatten)]
     pub project: Project,
@@ -147,19 +163,27 @@ pub struct ProjectDetail {
 
 /// Milestone row returned inside a project detail response.
 #[derive(Debug, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct MilestoneSummary {
+    #[cfg_attr(test, ts(type = "number"))]
     pub id: i64,
     pub name: String,
     pub description: Option<String>,
     pub status: String,
     pub target_date: Option<String>,
     pub due_date: Option<String>,
+    #[cfg_attr(test, ts(type = "number"))]
     pub sort_order: i64,
+    #[cfg_attr(test, ts(type = "number"))]
     pub task_count: i64,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct ProjectMember {
+    #[cfg_attr(test, ts(type = "number"))]
     pub user_id: i64,
     pub username: String,
     pub email: String,
@@ -219,28 +243,39 @@ pub struct ReorderMilestoneRequest {
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct Task {
+    #[cfg_attr(test, ts(type = "number"))]
     pub id: i64,
+    #[cfg_attr(test, ts(type = "number"))]
     pub milestone_id: i64,
     pub title: String,
     pub description: Option<String>,
     pub status: String,
     pub priority: String,
     pub due_date: Option<String>,
+    #[cfg_attr(test, ts(type = "number"))]
     pub sort_order: i64,
+    #[cfg_attr(test, ts(type = "number"))]
     pub created_by: i64,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct Assignee {
+    #[cfg_attr(test, ts(type = "number"))]
     pub user_id: i64,
     pub username: String,
 }
 
 /// Full task returned from all task endpoints — task fields + embedded assignees.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct TaskWithAssignees {
     #[serde(flatten)]
     pub task: Task,
@@ -280,7 +315,10 @@ pub struct ReorderTaskRequest {
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct User {
+    #[cfg_attr(test, ts(type = "number"))]
     pub id: i64,
     pub username: String,
     pub email: String,
@@ -295,9 +333,33 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RegisterRequest {
-    pub username: String,
-    pub email: String,
-    pub password: String,
+// ── TypeScript type generation ─────────────────────────────────────────────────
+
+#[cfg(test)]
+mod type_export {
+    use super::*;
+    use ts_rs::TS;
+
+    #[test]
+    fn export_types() {
+        let dir = "frontend/src/types/";
+        std::fs::create_dir_all(dir).expect("Could not create types directory");
+
+        // Enums
+        ProjectStatus::export_all_to(dir).unwrap();
+        MilestoneStatus::export_all_to(dir).unwrap();
+        TaskStatus::export_all_to(dir).unwrap();
+        TaskPriority::export_all_to(dir).unwrap();
+
+        // Response structs (export_all_to also exports transitive dependencies)
+        User::export_all_to(dir).unwrap();
+        Project::export_all_to(dir).unwrap();
+        ProjectListItem::export_all_to(dir).unwrap();
+        ProjectDetail::export_all_to(dir).unwrap();
+        MilestoneSummary::export_all_to(dir).unwrap();
+        ProjectMember::export_all_to(dir).unwrap();
+        Task::export_all_to(dir).unwrap();
+        Assignee::export_all_to(dir).unwrap();
+        TaskWithAssignees::export_all_to(dir).unwrap();
+    }
 }

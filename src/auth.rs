@@ -5,7 +5,7 @@ use argon2::{
 use async_trait::async_trait;
 use axum::{
     extract::{FromRef, FromRequestParts, Request, State},
-    http::{header, request::Parts, HeaderMap, StatusCode},
+    http::{header, request::Parts, HeaderMap},
     response::IntoResponse,
     Json,
 };
@@ -15,7 +15,7 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::models::{LoginRequest, RegisterRequest, User};
+use crate::models::{LoginRequest, User};
 use crate::AppState;
 
 pub struct AuthUser(pub User);
@@ -128,23 +128,27 @@ pub async fn me(AuthUser(user): AuthUser) -> Result<impl IntoResponse, AppError>
     Ok(Json(user))
 }
 
-pub async fn register(
-    State(state): State<AppState>,
-    Json(payload): Json<RegisterRequest>,
-) -> Result<impl IntoResponse, AppError> {
+// ── User management ───────────────────────────────────────────────────────────
+
+pub async fn create_user(
+    pool: &SqlitePool,
+    username: &str,
+    email: &str,
+    password: &str,
+) -> Result<User, AppError> {
     let salt = SaltString::generate(&mut OsRng);
     let hash = Argon2::default()
-        .hash_password(payload.password.as_bytes(), &salt)
+        .hash_password(password.as_bytes(), &salt)
         .map_err(|_| AppError::Internal("Password hashing failed".to_string()))?
         .to_string();
 
     let result = sqlx::query(
         "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
     )
-    .bind(&payload.username)
-    .bind(&payload.email)
+    .bind(username)
+    .bind(email)
     .bind(&hash)
-    .execute(&state.pool)
+    .execute(pool)
     .await
     .map_err(|e| {
         if e.to_string().contains("UNIQUE constraint failed") {
@@ -158,11 +162,78 @@ pub async fn register(
         "SELECT id, username, email, password_hash, created_at FROM users WHERE id = ?",
     )
     .bind(result.last_insert_rowid())
-    .fetch_one(&state.pool)
+    .fetch_one(pool)
     .await?;
 
-    Ok((StatusCode::CREATED, Json(user)))
+    Ok(user)
 }
+
+pub async fn list_users(pool: &SqlitePool) -> Result<Vec<User>, AppError> {
+    sqlx::query_as(
+        "SELECT id, username, email, password_hash, created_at FROM users ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+pub async fn delete_user(pool: &SqlitePool, username: &str) -> Result<(), AppError> {
+    let result = sqlx::query("DELETE FROM users WHERE username = ?")
+        .bind(username)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
+}
+
+pub async fn set_user_password(
+    pool: &SqlitePool,
+    username: &str,
+    password: &str,
+) -> Result<(), AppError> {
+    let salt = SaltString::generate(&mut OsRng);
+    let hash = Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|_| AppError::Internal("Password hashing failed".to_string()))?
+        .to_string();
+
+    let result = sqlx::query("UPDATE users SET password_hash = ? WHERE username = ?")
+        .bind(&hash)
+        .bind(username)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
+}
+
+/// Seeds an admin user on first boot if ADMIN_PASSWORD is set and no users exist yet.
+pub async fn seed_admin(pool: &SqlitePool) {
+    let password = match std::env::var("ADMIN_PASSWORD") {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let username = std::env::var("ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
+    let email = std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "admin@localhost".to_string());
+
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(pool)
+        .await
+        .unwrap_or((0,));
+    if count.0 > 0 {
+        return;
+    }
+
+    match create_user(pool, &username, &email, &password).await {
+        Ok(_) => tracing::info!("Admin user '{}' seeded", username),
+        Err(e) => tracing::warn!("Failed to seed admin user: {}", e),
+    }
+}
+
+// ── Authorization helpers ─────────────────────────────────────────────────────
 
 /// Returns the user's role in the project, or **404** if not a member.
 ///

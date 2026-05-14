@@ -27,6 +27,18 @@ impl IntoResponse for AppError {
     }
 }
 
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppError::Unauthorized => write!(f, "Unauthorized"),
+            AppError::Forbidden => write!(f, "Forbidden"),
+            AppError::NotFound => write!(f, "Not found"),
+            AppError::BadRequest(msg) => write!(f, "{}", msg),
+            AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
+        }
+    }
+}
+
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
         match err {
