@@ -87,7 +87,6 @@ async fn serve() {
 
     let pool = db::init().await;
     auth::cleanup_sessions(pool.clone());
-    auth::seed_admin(&pool).await;
 
     let state = AppState { pool };
 

@@ -1,4 +1,15 @@
 services:
+  init-user:
+    build: .
+    volumes:
+      - app-data:/data
+    environment:
+      DATABASE_URL: sqlite:/data/todo.db
+    entrypoint: >
+      sh -c "
+        ./little-orderings user create testuser test@localhost changeme || true
+      "
+
   app:
     build: .
     ports:
@@ -12,11 +23,9 @@ services:
       PORT: "3000"
       ALLOWED_ORIGIN: http://localhost:8080
       RUST_LOG: info
-      # On first boot with an empty DB, seeds an admin user.
-      # Remove after initial setup or leave unset to skip seeding.
-      ADMIN_PASSWORD: changeme
-      ADMIN_USER: admin
-      ADMIN_EMAIL: admin@localhost
+    depends_on:
+      init-user:
+        condition: service_completed_successfully
 
 volumes:
   app-data:
