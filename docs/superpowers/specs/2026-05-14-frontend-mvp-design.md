@@ -14,7 +14,7 @@ Before any frontend work begins, the following uncommitted backend changes must 
 - `src/main.rs` — rewritten with `clap` CLI: `plan-g serve`, `plan-g user {create,list,delete,set-password}`
 - `src/auth.rs` — removed `register` Axum handler; added standalone `create_user`, `list_users`, `delete_user`, `set_user_password`, `seed_admin` functions
 - `src/models.rs` — removed `RegisterRequest` struct
-- `src/routes/mod.rs` — removed `POST /api/users` route
+- `src/routes/mod.rs` — removed `POST /api/users` route (**`create_user` must not be exposed as an HTTP endpoint; verify no route re-introduces it**)
 - `src/error.rs` — added `Display` impl for `AppError`
 - `Dockerfile`, `docker-compose.yml` — added Docker build and runtime
 - `frontend/src/api/client.ts` — remove the dead `auth.register()` method (the endpoint no longer exists)
@@ -61,7 +61,7 @@ Fetches `GET /api/projects` (`ProjectListItem[]`) on mount via `useState` + `use
 
 **Page layout:**
 - `slate-900` background, full-height
-- Top nav: app name ("Plan Mine"), right-side logout button — calls `auth.logout()`, clears `AuthContext` user, navigates to `/login`
+- Top nav: app name ("Little Orderings"), right-side logout button — calls `auth.logout()`, clears `AuthContext` user, navigates to `/login`
 - Below nav: "Your Projects" heading + "New Project" button (top-right)
 - Responsive card grid (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`, `gap-4`)
 
@@ -123,7 +123,7 @@ interface ProjectContextType {
 
 - Creates `ProjectContext`, handles loading/error states
 - Page header: project name, target date, optional description, view toggle tabs (List | Kanban)
-- View toggle reads `?view=kanban` query param; default is list
+- View toggle reads `?view=list|kanban` query param; default is list. **Design the toggle as a multi-option tab bar, not a binary toggle** — List and Kanban are the first two views; additional views (e.g., Calendar, see §9) will be added later without structural change.
 - Renders `<ListView />` or `<KanbanBoard />` based on param
 - Renders `<TaskDetailModal />` when `selectedTaskId !== null`
 
@@ -233,6 +233,9 @@ All mutations flow through `ProjectContext` methods, which update local state so
 
 The following were considered and explicitly deferred:
 
+- **Remove `seed_admin` startup behavior** — the current `seed_admin` function runs at startup to create an initial admin user. There is no meaningful distinction between admin and non-admin users in this system, so the "admin user" concept does not belong in the data model. Replace `seed_admin` with a Docker Compose `init` service that runs `plan-g user create` to provision a test user. No user is created implicitly at server startup.
+- **Calendar view** — projects, milestones, and selected tasks should be visualizable on a calendar. The view toggle in §5.2 is intentionally designed as an extensible tab bar to accommodate this. A calendar view will require a dedicated route/query param value (`?view=calendar`) and a new calendar component; no structural change to `Project.tsx` is expected.
+- **Completed/cancelled task archiving** — tasks and milestones in terminal states (`done`, `cancelled`) should eventually be hidden from default views but remain accessible for historical/archival purposes. The mechanism (a filter toggle, a separate "Archive" route, an `archived_at` timestamp, etc.) is TBD; for now, all tasks are always shown.
 - **Avatar customization** — family members share initials; allow per-user emoji avatar selection. Requires `profile_emoji` column on users, profile editor UI.
 - **'n' keyboard shortcut** — add task in focused milestone
 - **Ctrl+K global search** — filter visible tasks by title
