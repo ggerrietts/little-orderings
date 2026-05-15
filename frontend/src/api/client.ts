@@ -39,12 +39,6 @@ export const auth = {
 
   logout: () =>
     request<void>('/api/auth/logout', { method: 'POST' }),
-
-  register: (username: string, email: string, password: string) =>
-    request<User>('/api/users', {
-      method: 'POST',
-      body: JSON.stringify({ username, email, password }),
-    }),
 };
 
 // ── Projects ──────────────────────────────────────────────────────────────────
