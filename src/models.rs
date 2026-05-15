@@ -77,7 +77,7 @@ impl MilestoneStatus {
 pub enum TaskStatus {
     Todo,
     InProgress,
-    Review,
+    Blocked,
     Done,
     Cancelled,
 }
@@ -87,7 +87,7 @@ impl TaskStatus {
         match self {
             TaskStatus::Todo => "todo",
             TaskStatus::InProgress => "in_progress",
-            TaskStatus::Review => "review",
+            TaskStatus::Blocked => "blocked",
             TaskStatus::Done => "done",
             TaskStatus::Cancelled => "cancelled",
         }

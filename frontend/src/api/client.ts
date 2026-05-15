@@ -139,7 +139,7 @@ export type CreateTaskInput = {
 export type UpdateTaskInput = {
   title?: string;
   description?: string | null;
-  status?: 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled';
+  status?: 'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   due_date?: string | null;
 };
