@@ -175,27 +175,34 @@ function CreateProjectModal({
       >
         <h2 className="text-lg font-semibold mb-4">New Project</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            type="text"
-            required
-            placeholder="Project name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm border border-slate-600 focus:outline-none focus:border-emerald-500"
-          />
-          <textarea
-            placeholder="Description (optional)"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm border border-slate-600 focus:outline-none focus:border-emerald-500 resize-none"
-            rows={3}
-          />
-          <input
-            type="date"
-            value={targetDate}
-            onChange={e => setTargetDate(e.target.value)}
-            className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm border border-slate-600 focus:outline-none focus:border-emerald-500"
-          />
+          <label className="block">
+            <span className="text-xs text-slate-400 block mb-1">Project name</span>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm border border-slate-600 focus:outline-none focus:border-emerald-500"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-slate-400 block mb-1">Description <span className="text-slate-600">(optional)</span></span>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm border border-slate-600 focus:outline-none focus:border-emerald-500 resize-none"
+              rows={3}
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-slate-400 block mb-1">Target date <span className="text-slate-600">(optional)</span></span>
+            <input
+              type="date"
+              value={targetDate}
+              onChange={e => setTargetDate(e.target.value)}
+              className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm border border-slate-600 focus:outline-none focus:border-emerald-500"
+            />
+          </label>
           <div className="flex gap-2 pt-2">
             <button
               type="button"

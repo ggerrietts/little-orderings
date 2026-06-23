@@ -83,7 +83,11 @@ function KanbanColumn({
           {count}
         </span>
       </div>
-      <div className="space-y-2">{children}</div>
+      <div className="space-y-2 min-h-32">
+        {count === 0
+          ? <p className="text-slate-600 text-xs italic pt-2">No tasks</p>
+          : children}
+      </div>
     </div>
   )
 }

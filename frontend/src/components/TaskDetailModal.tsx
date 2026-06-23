@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useProject } from '../contexts/ProjectContext'
 
@@ -9,9 +9,15 @@ export function TaskDetailModal() {
     updateTask, deleteTask, reorderTask, assignUser, unassignUser,
   } = useProject()
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
   const task = selectedTaskId != null
     ? Object.values(tasks).flat().find(t => t.id === selectedTaskId) ?? null
     : null
+
+  useEffect(() => {
+    setConfirmingDelete(false)
+  }, [selectedTaskId])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -26,7 +32,6 @@ export function TaskDetailModal() {
   const milestoneId = task.milestone_id
 
   async function handleDelete() {
-    if (!confirm('Delete this task?')) return
     await deleteTask(task!.id, milestoneId)
     setSelectedTaskId(null)
   }
@@ -40,9 +45,16 @@ export function TaskDetailModal() {
       onClick={() => setSelectedTaskId(null)}
     >
       <div
-        className="bg-slate-800 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-slate-800 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto relative"
         onClick={e => e.stopPropagation()}
       >
+        <button
+          onClick={() => setSelectedTaskId(null)}
+          aria-label="Close"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors text-lg leading-none"
+        >
+          ×
+        </button>
         <div className="p-6 space-y-4">
           {/* Title */}
           <input
@@ -180,13 +192,31 @@ export function TaskDetailModal() {
 
           {/* Delete */}
           <div className="border-t border-slate-700 pt-4">
-            <button
-              onClick={handleDelete}
-              className="text-red-400 hover:text-red-300 text-sm"
-              aria-label="Delete task"
-            >
-              Delete task
-            </button>
+            {confirmingDelete ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-400">Delete this task? This cannot be undone.</span>
+                <button
+                  onClick={handleDelete}
+                  className="text-red-400 hover:text-red-300 text-sm font-medium"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  className="text-slate-400 hover:text-white text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="text-red-400 hover:text-red-300 text-sm"
+                aria-label="Delete task"
+              >
+                Delete task
+              </button>
+            )}
           </div>
         </div>
       </div>

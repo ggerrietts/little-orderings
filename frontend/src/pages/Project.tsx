@@ -1,4 +1,4 @@
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ProjectProvider, useProject } from '../contexts/ProjectContext'
 import ListView from '../components/ListView'
 import KanbanBoard from '../components/KanbanBoard'
@@ -31,6 +31,9 @@ function ProjectContent() {
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <div className="px-8 py-6 border-b border-slate-800">
+        <Link to="/" className="text-sm text-slate-400 hover:text-white transition-colors inline-block mb-3">
+          ← All Projects
+        </Link>
         <h1 className="text-2xl font-bold mb-1">{project?.name}</h1>
         {project?.description != null && (
           <p className="text-slate-400 text-sm mb-3">{project.description}</p>

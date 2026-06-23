@@ -17,6 +17,13 @@ const PRIORITY_DOT: Record<string, string> = {
   urgent: 'bg-red-500',
 }
 
+const PRIORITY_LABEL: Record<string, string> = {
+  low: 'Low priority',
+  normal: 'Normal priority',
+  high: 'High priority',
+  urgent: 'Urgent priority',
+}
+
 export default function ListView() {
   const { milestones, tasks, addMilestone, updateMilestone, reorderMilestone } = useProject()
   const sensors = useSensors(useSensor(PointerSensor))
@@ -210,6 +217,7 @@ function SortableTaskRow({
         {task.title}
       </button>
       <span
+        title={PRIORITY_LABEL[task.priority] ?? 'Unknown priority'}
         className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-500'}`}
       />
       {task.due_date != null && (

@@ -9,6 +9,13 @@ const PRIORITY_DOT: Record<string, string> = {
   urgent: 'bg-red-500',
 }
 
+const PRIORITY_LABEL: Record<string, string> = {
+  low: 'Low priority',
+  normal: 'Normal priority',
+  high: 'High priority',
+  urgent: 'Urgent priority',
+}
+
 export function KanbanCard({
   task,
   milestone,
@@ -52,7 +59,10 @@ export function KanbanCard({
         </span>
       )}
       <div className="flex items-center gap-2 mt-2">
-        <span className={`w-2 h-2 rounded-full ${PRIORITY_DOT[task.priority] ?? 'bg-slate-500'}`} />
+        <span
+          title={PRIORITY_LABEL[task.priority] ?? 'Unknown priority'}
+          className={`w-2 h-2 rounded-full ${PRIORITY_DOT[task.priority] ?? 'bg-slate-500'}`}
+        />
         {task.due_date != null && (
           <span className={`text-xs ${overdue ? 'text-red-400' : 'text-slate-400'}`}>
             {format(parseISO(task.due_date), 'MMM d')}
