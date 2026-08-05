@@ -3,6 +3,9 @@
 # One-time provisioning for the little-orderings deployment host.
 # Run as root on a fresh Ubuntu 24.04 server. Idempotent — safe to re-run.
 #
+# Deliberately minimal: this server only ever pulls pre-built images from
+# GHCR and runs them. No build tooling, no source code, no buildx.
+#
 # Usage:
 #   DATA_ROOT=/mnt/HC_Volume_106548799 ./provision-server.sh
 #
@@ -11,7 +14,13 @@
 #   DEPLOY_USER    deploy                     Non-root user created for `docker context` access
 #   APP_UID        10001                      Must match the `app` user's uid in the Dockerfile
 #   APP_NAME       little-orderings           Subdirectory name under DATA_ROOT
-#   SWAP_SIZE_GB   2                          Swapfile size; cold Rust builds can OOM on 4GB RAM
+#   SWAP_SIZE_GB   2                          Swapfile size, general OOM safety margin on
+#                                              a 4GB box. Set to 0 to skip entirely.
+#   GHCR_USER      (unset)                    GitHub username, to `docker login ghcr.io`
+#   GHCR_TOKEN     (unset)                    PAT with read:packages, for the same login.
+#                                              Both required together, or skip and log in
+#                                              manually later — the repo is private, so
+#                                              `docker compose pull` won't work without this.
 
 set -euo pipefail
 
@@ -20,6 +29,8 @@ DEPLOY_USER="${DEPLOY_USER:-deploy}"
 APP_UID="${APP_UID:-10001}"
 APP_NAME="${APP_NAME:-little-orderings}"
 SWAP_SIZE_GB="${SWAP_SIZE_GB:-2}"
+GHCR_USER="${GHCR_USER:-}"
+GHCR_TOKEN="${GHCR_TOKEN:-}"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run as root." >&2
@@ -30,7 +41,7 @@ echo "==> Updating apt and installing base packages"
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl gnupg ufw
 
-echo "==> Installing Docker Engine + Compose plugin"
+echo "==> Installing Docker Engine + Compose plugin (no buildx — this box never builds)"
 if ! command -v docker &>/dev/null; then
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
@@ -40,7 +51,7 @@ if ! command -v docker &>/dev/null; then
   echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
     > /etc/apt/sources.list.d/docker.list
   apt-get update -qq
-  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
 else
   echo "    docker already installed, skipping"
 fi
@@ -83,20 +94,33 @@ mkdir -p "${APP_DATA_DIR}" "${CADDY_DATA_DIR}" "${CADDY_CONFIG_DIR}"
 # image runs as root, so its two directories don't need a chown.
 chown -R "${APP_UID}:${APP_UID}" "${APP_DATA_DIR}"
 
-echo "==> Setting up ${SWAP_SIZE_GB}GB swap (cold Rust builds can OOM on this box's RAM)"
-if ! swapon --show | grep -q '/swapfile'; then
-  fallocate -l "${SWAP_SIZE_GB}G" /swapfile
-  chmod 600 /swapfile
-  mkswap /swapfile
-  swapon /swapfile
-  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+if [[ "${SWAP_SIZE_GB}" != "0" ]]; then
+  echo "==> Setting up ${SWAP_SIZE_GB}GB swap (general OOM safety margin, not build-related)"
+  if ! swapon --show | grep -q '/swapfile'; then
+    fallocate -l "${SWAP_SIZE_GB}G" /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  else
+    echo "    swapfile already active, skipping"
+  fi
 else
-  echo "    swapfile already active, skipping"
+  echo "==> SWAP_SIZE_GB=0, skipping swapfile"
+fi
+
+echo "==> GHCR login (so 'docker compose pull' can reach the private image)"
+if [[ -n "${GHCR_USER}" && -n "${GHCR_TOKEN}" ]]; then
+  su - "${DEPLOY_USER}" -c "echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USER}' --password-stdin"
+else
+  echo "    GHCR_USER/GHCR_TOKEN not set — skipping. Before the first deploy, run as"
+  echo "    ${DEPLOY_USER}: echo \$GHCR_TOKEN | docker login ghcr.io -u <github-username> --password-stdin"
 fi
 
 cat <<EOF
 
-==> Done.
+==> Done. This box now has: Docker Engine, the compose plugin, and nothing else —
+no build tooling, no source code. It only ever pulls and runs images.
 
 Data directories (bind-mount targets for docker-compose.prod.yml):
   App data:     ${APP_DATA_DIR}
@@ -107,6 +131,8 @@ From your local machine:
   docker context create ${APP_NAME} --docker "host=ssh://${DEPLOY_USER}@todo.gerrietts.net"
   docker context use ${APP_NAME}
 
-Then, from the repo root, with a real .env in place (see .env.example):
-  DATA_ROOT=${DATA_ROOT} docker compose -f docker-compose.prod.yml up -d --build
+Then, with a real .env in place locally (see .env.example) and an image already
+pushed to GHCR (see .github/workflows/build-and-push.yml):
+  docker compose -f docker-compose.prod.yml pull
+  docker compose -f docker-compose.prod.yml up -d
 EOF

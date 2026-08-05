@@ -1,6 +1,6 @@
 services:
   init-user:
-    build: .
+    image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}
     volumes:
       - app-data:/data
     env_file: .env
@@ -12,7 +12,7 @@ services:
       "
 
   app:
-    build: .
+    image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}
     expose:
       - "3000"
     volumes:

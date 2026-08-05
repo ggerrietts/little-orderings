@@ -23,11 +23,11 @@ of 2026-08-05.
 | Data volume | Attached Hetzner Volume mounted at `/mnt/HC_Volume_106548799` — app + Caddy data live here, not the 40 GB root disk. Parametrized as `DATA_ROOT` (see §6). |
 | Users | Currently **root only**. `deploy/provision-server.sh` (added 2026-08-05) creates a `deploy` user for `docker context` access — not yet run against the real box. |
 
-**Constraint that shapes everything below:** 2 vCPU / 4 GB is enough to *run* the app
-comfortably and not enough to *build* it comfortably. `cargo build --release` for this
-crate takes ~55s on a decent dev machine with a warm registry cache; on 2 shared vCPU
-with a cold cache (fresh `cargo install sqlx-cli` + full dependency compile) it'll be
-several minutes and is worth avoiding on the box itself. See §5.
+**Constraint that shaped §5's decision:** 2 vCPU / 4 GB is enough to *run* the app
+comfortably and not enough to *build* it comfortably — a cold Rust build with a fresh
+`sqlx-cli` install would take several minutes and risk OOM. Resolved by never building
+on this box at all: see §5. As of 2026-08-05 this server also holds **no source code
+and no build tooling** — that was an explicit requirement, not just an optimization.
 
 ---
 
@@ -119,7 +119,7 @@ Volume gotchas:
 
 ---
 
-## 5. Build and deploy strategy — decided
+## 5. Build and deploy strategy — decided, revised 2026-08-05
 
 Plain `docker compose up` is **not** the same thing as Docker Swarm's
 `docker stack deploy`. The `deploy:` key in a Compose file (`replicas`,
@@ -128,20 +128,30 @@ be initialized (`docker swarm init`) even on a single node for most of it to do
 anything, and stacks can't `build:` (images must be pre-built and pushed). That's more
 machinery than a single-instance personal app needs.
 
-**Decision (2026-08-05): `docker context` for now, GHCR + GitHub Actions later.**
+The first version of this decision was "`docker context` now (building on the remote
+daemon via `--build`), GHCR + Actions later." **Revised same day:** that still means
+the source tree gets streamed to the server's Docker daemon and sits in its build
+cache/layers, which conflicts with an explicit requirement — as little as possible on
+the server, no source code, ever. So: **build off-box from the start, no on-box build
+step at any point.**
 
-- **Now:** point the local Docker CLI at the remote daemon over SSH
-  (`docker context create hetzner --docker "host=ssh://<user>@todo.gerrietts.net"`) and
-  run `docker compose -f docker-compose.prod.yml up -d --build` against it directly —
-  no CI, no registry, fastest path to something live. The build happens on the
-  server's Docker daemon either way (buildx doesn't offload the build itself just
-  because the CLI is remote), so §1's cold-build/OOM risk still applies the first time
-  — worth a swapfile before the first build regardless of which deploy path is used.
-- **Later:** GitHub Actions builds the image and pushes to GHCR; the server does
-  `docker compose pull && docker compose up -d`, which is instant and costs no
-  server-side build RAM. Migrate to this once the app-side and Compose changes below
-  have proven themselves in the `docker context` flow. Tag images by git SHA, not just
-  `latest`, so rollback is "change one line and `up -d`."
+- **GitHub Actions** (`.github/workflows/build-and-push.yml`, added 2026-08-05) builds
+  the image on GitHub's runners on every push to `main` (or manual dispatch) and
+  pushes to `ghcr.io/ggerrietts/little-orderings`, tagged `latest` and by git SHA.
+  Source code touches GitHub's ephemeral runners, same as any normal CI build — never
+  the server.
+- **The server only ever runs** `docker compose -f docker-compose.prod.yml pull` then
+  `up -d`. `docker-compose.prod.yml` now references `image: ghcr.io/...` for both
+  `init-user` and `app` — there's no `build:` key in that file at all, so it's not
+  possible to accidentally build there even by habit (`up -d --build` on a compose
+  file with no `build:` key is a no-op for those services).
+- `docker context` is still useful — it's just scoped to `pull`/`up`, never `--build`,
+  so no source ever transits it.
+- The repo is **private**, so the pushed image is private too — the server needs a
+  one-time `docker login ghcr.io` with a `read:packages` token before its first pull
+  (§9, scripted as an optional step in `deploy/provision-server.sh`).
+- Images are tagged by git SHA as well as `latest`, so rollback is "set `IMAGE_TAG` to
+  a previous SHA and `up -d`" without rebuilding anything.
 
 ---
 
@@ -174,10 +184,16 @@ standalone files are easier to reason about):
     `deploy/provision-server.sh` share one source of truth for the path. Validated with
     `docker compose config` using different `DATA_ROOT` values — interpolates
     correctly.
+  - ✅ **`init-user` and `app` use `image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}`**,
+    no `build:` key at all (revised 2026-08-05, see §5) — this file cannot build,
+    only pull and run.
 
-Run production with `docker compose -f docker-compose.prod.yml up -d`. The target
-directories must exist and be owned correctly before first run — that's what
-`deploy/provision-server.sh` does (§1, not yet run against the real box).
+Run production with `docker compose -f docker-compose.prod.yml pull && docker compose
+-f docker-compose.prod.yml up -d` — deliberately two steps, not `up -d --build` (which
+wouldn't build anything here anyway, but `pull` first makes the deploy's intent
+explicit: fetch what CI already built, run it). The target directories must exist and
+be owned correctly before first run — that's what `deploy/provision-server.sh` does
+(§1, not yet run against the real box).
 
 ---
 
@@ -225,8 +241,16 @@ Required contents (per `.env.example`): `SESSION_SECRET` (32+ random bytes, base
 generate on the server with `openssl rand -base64 32`, not locally, not in chat, not
 in a commit), `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` for the account the
 `init-user` service creates on first boot, and `DATA_ROOT` (not sensitive, just kept
-here so it's one source of truth with the provisioning script — see §6). Add a GHCR
-token here too once build strategy moves to off-box (§5).
+here so it's one source of truth with the provisioning script — see §6).
+
+**GHCR pull token — separate from `.env` on purpose.** The repo (and so the pushed
+image) is private, so the server needs to authenticate to pull. This doesn't go in
+`.env`/`env_file:` — that would inject it into the app containers' environment for no
+reason. Instead it's a one-time `docker login ghcr.io` as the `deploy` user, which
+caches credentials in that user's own Docker config. `deploy/provision-server.sh` does
+this automatically if run with `GHCR_USER`/`GHCR_TOKEN` set (a GitHub PAT scoped to
+just `read:packages`); otherwise it prints the manual command to run once before the
+first pull.
 
 ---
 
@@ -254,32 +278,47 @@ Struck-through items are done; the rest is what's actually left.
 3. ~~App-side changes (§8): graceful shutdown~~ — done, verified locally.
 4. ~~SQLite pragmas (§4): WAL + busy_timeout + synchronous=NORMAL~~ — done, verified
    locally.
-5. ~~Decide the deploy mechanism (§5)~~ — decided: `docker context` now, GHCR/CI later.
-6. ~~Prod Compose topology + Caddyfile (§6/§7)~~ — `docker-compose.prod.yml`,
-   `Caddyfile`, `.env.example` all added 2026-08-05. Validated with
-   `docker compose -f docker-compose.prod.yml config`; not yet run against the real
-   server.
+5. ~~Decide the deploy mechanism (§5)~~ — decided, then revised same day: build
+   off-box via GitHub Actions from the start, server only ever pulls. No on-box build
+   step at any point, matching an explicit "as little as possible on the server, no
+   source code" requirement.
+6. ~~Prod Compose topology + Caddyfile (§6/§7)~~ — `docker-compose.prod.yml` (now
+   `image:`-only, no `build:`), `Caddyfile`, `.env.example` all added 2026-08-05.
+   Validated with `docker compose -f docker-compose.prod.yml config`; not yet run
+   against the real server.
 7. ~~Write the server provisioning script~~ — `deploy/provision-server.sh` added
-   2026-08-05: installs Docker, creates the `deploy` user (docker-group, copies root's
-   SSH key), configures `ufw`, creates and `chown`s the `DATA_ROOT` directories, sets
-   up a swapfile. Idempotent, not yet run against the real box.
-8. **Next:** run the provisioning script against the real server, then
-   `docker context create` from the local machine pointed at it.
-9. Confirm `dig todo.gerrietts.net` resolves **before** first `docker compose up`.
-10. Create the real `.env` on the server from `.env.example`, `chmod 600`.
-11. Deploy with ACME staging, verify, switch to production CA.
-12. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
-13. Once the `docker context` flow is proven: wire up GitHub Actions + GHCR (§5).
+   2026-08-05, revised same day to drop the buildx plugin (nothing builds on this
+   box) and add an optional GHCR login step. Installs Docker + compose plugin only,
+   creates the `deploy` user, configures `ufw`, creates and `chown`s the `DATA_ROOT`
+   directories, sets up a swapfile (general safety margin now, not build-OOM
+   avoidance — the reason that mattered is gone). Idempotent, not yet run against the
+   real box.
+8. ~~Write the GitHub Actions build/push workflow~~ — `.github/workflows/build-and-push.yml`
+   added 2026-08-05: builds on `push` to `main` or manual dispatch, pushes to
+   `ghcr.io/ggerrietts/little-orderings` tagged `latest` + git SHA, using the
+   repo-scoped `GITHUB_TOKEN` (no extra secret needed to push). Not yet triggered.
+9. **Next:** run the provisioning script against the real server (with
+   `GHCR_USER`/`GHCR_TOKEN` set, or log in manually after), then `docker context
+   create` from the local machine pointed at it.
+10. Push to `main` (or trigger the workflow manually) to get a first image into GHCR.
+11. Confirm `dig todo.gerrietts.net` resolves **before** first `docker compose up`.
+12. Create the real `.env` on the server from `.env.example`, `chmod 600`.
+13. Deploy with ACME staging (`docker compose pull && up -d`), verify, switch to
+    production CA.
+14. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
 
 ## Open decisions
 
-- [x] ~~Build off-box (GHCR) vs on-box vs a dedicated deploy tool~~ — §5: `docker
-  context` now, GHCR/CI later
+- [x] ~~Build off-box (GHCR) vs on-box vs a dedicated deploy tool~~ — §5: fully
+  off-box via GitHub Actions, decided and re-confirmed 2026-08-05
 - [x] ~~Leptos SSR vs CSR~~ — resolved: React CSR, single Axum-served origin
 - [x] ~~SQLite WAL/busy_timeout/synchronous~~ — done
 - [x] ~~Non-root container user~~ — done
 - [x] ~~How to provision the server (packages, non-root user, data volume)~~ — scripted
   in `deploy/provision-server.sh`, not yet executed
+- [ ] GHCR package visibility — currently private (matches the private repo), needs a
+  one-time `docker login` on the server. Could be flipped to public to skip that, at
+  the cost of the image (not the source) being world-readable.
 - [ ] Backup destination (Hetzner Storage Box vs S3 vs rsync target)
 - [ ] Whether to add external uptime monitoring now or later
 - [ ] Whether `/health` should check the DB pool (`SELECT 1`) — currently a static 200
