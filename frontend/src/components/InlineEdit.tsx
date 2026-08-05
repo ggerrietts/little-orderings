@@ -47,7 +47,7 @@ export function InlineEdit({ value, onSave, className }: InlineEditProps) {
   }
 
   return (
-    <span onClick={startEdit} className={className} style={{ cursor: 'text' }}>
+    <span onClick={startEdit} className={`${className} hover:underline`} style={{ cursor: 'text' }}>
       {value}
     </span>
   )

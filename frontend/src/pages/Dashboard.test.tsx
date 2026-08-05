@@ -69,7 +69,7 @@ test('"New Project" button opens the create modal', async () => {
   renderDashboard()
   await waitFor(() => screen.getByText(/no projects yet/i))
   await user.click(screen.getByRole('button', { name: /new project/i }))
-  expect(screen.getByPlaceholderText(/project name/i)).toBeInTheDocument()
+  expect(screen.getByLabelText(/project name/i)).toBeInTheDocument()
 })
 
 test('logout clears user and navigates', async () => {

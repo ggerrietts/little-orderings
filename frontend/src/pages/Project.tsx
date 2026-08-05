@@ -1,4 +1,4 @@
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ProjectProvider, useProject } from '../contexts/ProjectContext'
 import ListView from '../components/ListView'
 import KanbanBoard from '../components/KanbanBoard'
@@ -18,8 +18,8 @@ function ProjectContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -29,33 +29,40 @@ function ProjectContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <div className="px-8 py-6 border-b border-slate-800">
-        <h1 className="text-2xl font-bold mb-1">{project?.name}</h1>
-        {project?.description != null && (
-          <p className="text-slate-400 text-sm mb-3">{project.description}</p>
-        )}
-        <div role="tablist" className="flex gap-1 mt-4">
-          {VIEWS.map(tab => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={view === tab.id}
-              onClick={() => setView(tab.id)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                view === tab.id
-                  ? 'bg-slate-700 text-white'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+    <div className="min-h-screen bg-canvas">
+      <div className="px-8 py-6 border-b border-border">
+        <div className="max-w-6xl mx-auto">
+          <Link to="/" className="text-sm text-muted hover:text-accent-muted transition-colors inline-block mb-3">
+            ← All Projects
+          </Link>
+          <h1 className="text-2xl font-semibold text-text mb-1">{project?.name}</h1>
+          {project?.description != null && (
+            <p className="text-muted text-sm mb-3">{project.description}</p>
+          )}
+          <div role="tablist" className="flex gap-1 mt-4">
+            {VIEWS.map(tab => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={view === tab.id}
+                onClick={() => setView(tab.id)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  view === tab.id
+                    ? 'bg-accent-subtle text-accent'
+                    : 'text-muted hover:text-text'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="px-8 py-4">
-        {view === 'list' ? <ListView /> : <KanbanBoard />}
+        <div className="max-w-6xl mx-auto">
+          {view === 'list' ? <ListView /> : <KanbanBoard />}
+        </div>
       </div>
 
       {selectedTaskId != null && <TaskDetailModal />}

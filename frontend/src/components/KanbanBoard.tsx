@@ -73,17 +73,21 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`min-w-64 flex-shrink-0 rounded-xl p-3 transition-colors ${
-        isOver ? 'bg-slate-700/50' : 'bg-slate-800/50'
+      className={`min-w-64 flex-shrink-0 rounded-xl p-3 border transition-colors ${
+        isOver ? 'bg-accent-subtle border-accent/30' : 'bg-surface border-border shadow-sm'
       }`}
     >
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="font-medium text-white text-sm">{label}</h3>
-        <span className="text-xs bg-slate-700 text-slate-400 rounded-full px-2 py-0.5">
+        <h3 className="font-medium text-text text-sm">{label}</h3>
+        <span className="text-xs bg-canvas text-muted rounded-full px-2 py-0.5">
           {count}
         </span>
       </div>
-      <div className="space-y-2">{children}</div>
+      <div className="space-y-2 min-h-32">
+        {count === 0
+          ? <p className="text-muted text-xs italic pt-2">No tasks</p>
+          : children}
+      </div>
     </div>
   )
 }

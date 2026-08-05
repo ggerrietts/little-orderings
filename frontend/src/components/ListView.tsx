@@ -11,10 +11,17 @@ import { InlineEdit } from './InlineEdit'
 import type { MilestoneSummary, TaskWithAssignees } from '../types'
 
 const PRIORITY_DOT: Record<string, string> = {
-  low: 'bg-slate-500',
-  normal: 'bg-blue-500',
-  high: 'bg-amber-500',
-  urgent: 'bg-red-500',
+  low: 'bg-priority-low',
+  normal: 'bg-priority-normal',
+  high: 'bg-priority-high',
+  urgent: 'bg-priority-urgent',
+}
+
+const PRIORITY_LABEL: Record<string, string> = {
+  low: 'Low priority',
+  normal: 'Normal priority',
+  high: 'High priority',
+  urgent: 'Urgent priority',
 }
 
 export default function ListView() {
@@ -48,7 +55,7 @@ export default function ListView() {
       </DndContext>
 
       {sorted.length === 0 && (
-        <p className="text-slate-400 text-center py-16">
+        <p className="text-muted text-center py-16">
           No milestones yet. Add your first milestone below.
         </p>
       )}
@@ -78,34 +85,34 @@ function MilestoneSection({
     milestone.status !== 'done'
 
   return (
-    <div ref={setNodeRef} style={style} className="bg-slate-800/50 rounded-xl">
+    <div ref={setNodeRef} style={style} className="bg-surface border border-border shadow-sm rounded-xl">
       <div className="flex items-center gap-2 px-4 py-3">
         <span
           {...attributes}
           {...listeners}
-          className="cursor-grab text-slate-600 hover:text-slate-400 select-none"
+          className="cursor-grab text-border-strong hover:text-muted select-none"
         >
           ⠿
         </span>
         <button
           onClick={() => setCollapsed(c => !c)}
-          className="text-slate-400 hover:text-white"
+          className="text-muted hover:text-text"
         >
           {collapsed ? '▶' : '▼'}
         </button>
-        <h3 className="font-semibold text-white flex-1">
+        <h3 className="font-semibold text-text flex-1">
           <InlineEdit
             value={milestone.name}
             onSave={onRename}
-            className="bg-transparent text-white font-semibold"
+            className="bg-transparent text-text font-semibold text-base"
           />
         </h3>
         {milestone.target_date != null && (
-          <span className={`text-xs ${overdueMs ? 'text-red-400' : 'text-slate-400'}`}>
+          <span className={`text-xs ${overdueMs ? 'text-danger' : 'text-muted'}`}>
             {format(parseISO(milestone.target_date), 'MMM d, yyyy')}
           </span>
         )}
-        <span className="text-xs text-slate-500">{tasks.length} tasks</span>
+        <span className="text-xs text-muted">{tasks.length} tasks</span>
       </div>
 
       {!collapsed && (
@@ -188,12 +195,12 @@ function SortableTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 px-4 py-2 hover:bg-slate-800 group"
+      className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-raised group"
     >
       <span
         {...attributes}
         {...listeners}
-        className="cursor-grab text-slate-700 hover:text-slate-500 opacity-0 group-hover:opacity-100"
+        className="cursor-grab text-border hover:text-muted opacity-0 group-hover:opacity-100"
       >
         ⠿
       </span>
@@ -201,19 +208,20 @@ function SortableTaskRow({
         type="checkbox"
         checked={task.status === 'done'}
         onChange={onToggleDone}
-        className="accent-emerald-500"
+        className="accent-accent"
       />
       <button
         onClick={onClickTitle}
-        className="flex-1 text-left text-sm text-white hover:text-emerald-400"
+        className="flex-1 text-left text-sm font-medium text-text hover:text-accent-muted"
       >
         {task.title}
       </button>
       <span
-        className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-500'}`}
+        title={PRIORITY_LABEL[task.priority] ?? 'Unknown priority'}
+        className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-priority-low'}`}
       />
       {task.due_date != null && (
-        <span className={`text-xs ${overdue ? 'text-red-400' : 'text-slate-400'}`}>
+        <span className={`text-xs ${overdue ? 'text-danger' : 'text-muted'}`}>
           {format(parseISO(task.due_date), 'MMM d')}
         </span>
       )}
@@ -222,13 +230,13 @@ function SortableTaskRow({
           <div
             key={a.user_id}
             title={a.username}
-            className="w-6 h-6 rounded-full bg-slate-600 text-xs flex items-center justify-center text-white border border-slate-800"
+            className="w-6 h-6 rounded-full bg-border-strong text-xs flex items-center justify-center text-text border border-surface"
           >
             {initials(a.username)}
           </div>
         ))}
         {task.assignees.length > 3 && (
-          <div className="w-6 h-6 rounded-full bg-slate-600 text-xs flex items-center justify-center text-white border border-slate-800">
+          <div className="w-6 h-6 rounded-full bg-border-strong text-xs flex items-center justify-center text-text border border-surface">
             +{task.assignees.length - 3}
           </div>
         )}
@@ -256,7 +264,7 @@ function AddTaskRow({ milestoneId }: { milestoneId: number }) {
         placeholder="Add a task…"
         value={value}
         onChange={e => setValue(e.target.value)}
-        className="w-full bg-transparent text-sm text-slate-400 placeholder-slate-600 focus:outline-none"
+        className="w-full bg-transparent text-sm text-muted placeholder:text-border-strong focus:outline-none"
       />
     </form>
   )
@@ -279,7 +287,7 @@ function AddMilestoneButton({ onAdd }: { onAdd: (name: string) => Promise<void> 
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-slate-400 hover:text-emerald-400 text-sm"
+        className="text-muted hover:text-accent-muted text-sm"
       >
         + Add milestone
       </button>
@@ -295,12 +303,12 @@ function AddMilestoneButton({ onAdd }: { onAdd: (name: string) => Promise<void> 
         value={name}
         onChange={e => setName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}
-        className="bg-slate-800 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-emerald-500"
+        className="bg-surface text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
       />
-      <button type="submit" className="bg-emerald-500 text-white text-sm rounded-lg px-4 py-2">
+      <button type="submit" className="bg-accent text-surface text-sm rounded-lg px-4 py-2">
         Add
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-slate-400 text-sm px-2">
+      <button type="button" onClick={() => setOpen(false)} className="text-muted text-sm px-2">
         Cancel
       </button>
     </form>

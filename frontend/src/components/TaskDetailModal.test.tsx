@@ -67,13 +67,13 @@ test('delete button calls deleteTask and closes modal', async () => {
   const user = userEvent.setup()
   const deleteTask = vi.fn().mockResolvedValue(undefined)
   const setSelectedTaskId = vi.fn()
-  vi.spyOn(window, 'confirm').mockReturnValue(true)
   render(
     <ProjectContext.Provider value={makeCtx({ deleteTask, setSelectedTaskId })}>
       <TaskDetailModal />
     </ProjectContext.Provider>
   )
-  await user.click(screen.getByRole('button', { name: /delete/i }))
+  await user.click(screen.getByRole('button', { name: /delete task/i }))
+  await user.click(screen.getByRole('button', { name: /^delete$/i }))
   await waitFor(() => expect(deleteTask).toHaveBeenCalledWith(100, 10))
   expect(setSelectedTaskId).toHaveBeenCalledWith(null)
 })

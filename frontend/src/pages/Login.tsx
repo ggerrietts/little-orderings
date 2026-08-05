@@ -27,21 +27,21 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-canvas flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-white mb-2">Little Orderings</h1>
-        <p className="text-slate-400 mb-8">Sign in to your account</p>
+        <h1 className="text-2xl font-semibold text-text mb-2">Little Orderings</h1>
+        <p className="text-muted mb-8">Sign in to your account</p>
 
-        <div className="bg-slate-800 rounded-xl p-8">
+        <div className="bg-surface rounded-xl p-8 border border-border shadow-sm">
           {error && (
-            <p className="text-red-400 text-sm mb-4 bg-red-400/10 rounded-lg px-3 py-2">
+            <p className="text-danger text-sm mb-4 bg-danger-subtle rounded-lg px-3 py-2">
               {error}
             </p>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-text mb-1">
                 Username
               </label>
               <input
@@ -50,15 +50,15 @@ export default function Login() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm
-                           border border-slate-600 focus:outline-none focus:border-emerald-500
-                           placeholder-slate-500"
+                className="w-full bg-surface text-text rounded-lg px-3 py-2 text-sm
+                           border border-border focus:outline-none focus:border-accent
+                           placeholder:text-muted"
                 placeholder="your-username"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
+              <label className="block text-sm font-medium text-text mb-1">
                 Password
               </label>
               <input
@@ -67,16 +67,16 @@ export default function Login() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm
-                           border border-slate-600 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-surface text-text rounded-lg px-3 py-2 text-sm
+                           border border-border focus:outline-none focus:border-accent"
               />
             </div>
 
             <button
               type="submit"
               disabled={submitting}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50
-                         text-white font-semibold rounded-lg py-2 text-sm transition-colors"
+              className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50
+                         text-surface font-semibold rounded-lg py-2 text-sm transition-colors"
             >
               {submitting ? 'Signing in…' : 'Sign in'}
             </button>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useProject } from '../contexts/ProjectContext'
 
@@ -9,9 +9,15 @@ export function TaskDetailModal() {
     updateTask, deleteTask, reorderTask, assignUser, unassignUser,
   } = useProject()
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
   const task = selectedTaskId != null
     ? Object.values(tasks).flat().find(t => t.id === selectedTaskId) ?? null
     : null
+
+  useEffect(() => {
+    setConfirmingDelete(false)
+  }, [selectedTaskId])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -26,7 +32,6 @@ export function TaskDetailModal() {
   const milestoneId = task.milestone_id
 
   async function handleDelete() {
-    if (!confirm('Delete this task?')) return
     await deleteTask(task!.id, milestoneId)
     setSelectedTaskId(null)
   }
@@ -36,13 +41,20 @@ export function TaskDetailModal() {
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-text/40 flex items-center justify-center z-50 p-4"
       onClick={() => setSelectedTaskId(null)}
     >
       <div
-        className="bg-slate-800 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-surface rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto relative border border-border shadow-xl"
         onClick={e => e.stopPropagation()}
       >
+        <button
+          onClick={() => setSelectedTaskId(null)}
+          aria-label="Close"
+          className="absolute top-4 right-4 text-muted hover:text-text transition-colors text-lg leading-none"
+        >
+          ×
+        </button>
         <div className="p-6 space-y-4">
           {/* Title */}
           <input
@@ -54,7 +66,7 @@ export function TaskDetailModal() {
                 updateTask(task.id, milestoneId, { title: e.target.value.trim() })
               }
             }}
-            className="w-full bg-transparent text-white text-lg font-semibold border-b border-slate-600 focus:outline-none focus:border-emerald-500 pb-1"
+            className="w-full bg-transparent text-text text-lg font-semibold border-b border-border focus:outline-none focus:border-accent pb-1"
           />
 
           {/* Description */}
@@ -66,20 +78,20 @@ export function TaskDetailModal() {
             })}
             rows={3}
             placeholder="Add a description…"
-            className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none focus:border-emerald-500 resize-none"
+            className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent resize-none placeholder:text-muted"
           />
 
           {/* Status + Priority */}
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs text-slate-400 block mb-1">Status</span>
+              <span className="text-xs text-muted block mb-1">Status</span>
               <select
                 aria-label="Status"
                 value={task.status}
                 onChange={e => updateTask(task.id, milestoneId, {
                   status: e.target.value as Parameters<typeof updateTask>[2]['status'],
                 })}
-                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none"
+                className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
               >
                 <option value="todo">Todo</option>
                 <option value="in_progress">In Progress</option>
@@ -90,14 +102,14 @@ export function TaskDetailModal() {
             </label>
 
             <label className="block">
-              <span className="text-xs text-slate-400 block mb-1">Priority</span>
+              <span className="text-xs text-muted block mb-1">Priority</span>
               <select
                 aria-label="Priority"
                 value={task.priority}
                 onChange={e => updateTask(task.id, milestoneId, {
                   priority: e.target.value as Parameters<typeof updateTask>[2]['priority'],
                 })}
-                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none"
+                className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
               >
                 <option value="low">Low</option>
                 <option value="normal">Normal</option>
@@ -109,7 +121,7 @@ export function TaskDetailModal() {
 
           {/* Due date */}
           <label className="block">
-            <span className="text-xs text-slate-400 block mb-1">Due date</span>
+            <span className="text-xs text-muted block mb-1">Due date</span>
             <input
               type="date"
               aria-label="Due date"
@@ -117,13 +129,13 @@ export function TaskDetailModal() {
               onChange={e => updateTask(task.id, milestoneId, {
                 due_date: e.target.value || null,
               })}
-              className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none"
+              className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
             />
           </label>
 
           {/* Milestone */}
           <label className="block">
-            <span className="text-xs text-slate-400 block mb-1">Milestone</span>
+            <span className="text-xs text-muted block mb-1">Milestone</span>
             <select
               aria-label="Milestone"
               value={task.milestone_id}
@@ -133,7 +145,7 @@ export function TaskDetailModal() {
                   reorderTask(task.id, task.milestone_id, toId, 0)
                 }
               }}
-              className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none"
+              className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
             >
               {milestones.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
@@ -143,17 +155,17 @@ export function TaskDetailModal() {
 
           {/* Assignees */}
           <div>
-            <span className="text-xs text-slate-400 block mb-2">Assignees</span>
+            <span className="text-xs text-muted block mb-2">Assignees</span>
             <div className="flex flex-wrap gap-2 mb-2">
               {task.assignees.map(a => (
                 <span
                   key={a.user_id}
-                  className="flex items-center gap-1 bg-slate-700 text-sm text-white px-2 py-1 rounded-full"
+                  className="flex items-center gap-1 bg-accent-subtle text-sm text-accent-muted px-2 py-1 rounded-full"
                 >
                   {a.username}
                   <button
                     onClick={() => unassignUser(task.id, milestoneId, a.user_id)}
-                    className="text-slate-400 hover:text-white ml-1"
+                    className="text-muted hover:text-text ml-1"
                     aria-label={`Remove ${a.username}`}
                   >
                     ×
@@ -168,7 +180,7 @@ export function TaskDetailModal() {
                 onChange={e => {
                   if (e.target.value) assignUser(task.id, milestoneId, Number(e.target.value))
                 }}
-                className="bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-slate-600 focus:outline-none"
+                className="bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
               >
                 <option value="">Assign…</option>
                 {unassigned.map(m => (
@@ -179,14 +191,32 @@ export function TaskDetailModal() {
           </div>
 
           {/* Delete */}
-          <div className="border-t border-slate-700 pt-4">
-            <button
-              onClick={handleDelete}
-              className="text-red-400 hover:text-red-300 text-sm"
-              aria-label="Delete task"
-            >
-              Delete task
-            </button>
+          <div className="border-t border-border pt-4">
+            {confirmingDelete ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted">Delete this task? This cannot be undone.</span>
+                <button
+                  onClick={handleDelete}
+                  className="text-danger hover:text-danger/80 text-sm font-medium"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  className="text-muted hover:text-text text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="text-danger hover:text-danger/80 text-sm"
+                aria-label="Delete task"
+              >
+                Delete task
+              </button>
+            )}
           </div>
         </div>
       </div>
