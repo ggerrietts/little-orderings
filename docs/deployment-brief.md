@@ -20,6 +20,8 @@ of 2026-08-05.
 | Runtime | Docker Engine + Compose v2 plugin |
 | Hostname | `todo.gerrietts.net` (A record → server IPv4) |
 | Ports open | 22, 80, 443 only (Hetzner Cloud Firewall, deny-by-default inbound) |
+| Data volume | Attached Hetzner Volume mounted at `/mnt/HC_Volume_106548799` — app + Caddy data live here, not the 40 GB root disk. Parametrized as `DATA_ROOT` (see §6). |
+| Users | Currently **root only**. `deploy/provision-server.sh` (added 2026-08-05) creates a `deploy` user for `docker context` access — not yet run against the real box. |
 
 **Constraint that shapes everything below:** 2 vCPU / 4 GB is enough to *run* the app
 comfortably and not enough to *build* it comfortably. `cargo build --release` for this
@@ -69,8 +71,12 @@ Already true, no action needed:
   broken a from-clone build, since the Dockerfile `COPY`s it by name).
 - ✅ **Runs as a non-root user** (added 2026-08-05): `app`, fixed uid/gid 10001.
   `/data` is `chown`'d to `app` in the image *before* it's used as a volume mount
-  point — Docker copies that ownership into a fresh named volume on first
-  initialization, so no entrypoint chown dance or `gosu`/`su-exec` needed. Verified via
+  point. That "ownership copies into a fresh volume on first init" behavior is a
+  **Docker-managed volume** feature — it's what the dev compose file gets, but the
+  prod compose file bind-mounts an external directory on the attached volume instead
+  (§6), and bind mounts do **not** get this treatment. For prod, ownership of that
+  directory is instead set explicitly by `deploy/provision-server.sh` (`chown
+  10001:10001`, kept in sync with this uid via its `APP_UID` var). Verified via
   `docker compose config`; `init-user` and `app` both inherit the image's `USER app`.
 - ✅ **`HEALTHCHECK`** added to the Dockerfile (`curl -f http://127.0.0.1:3000/health`,
   30s interval). `curl` added to the runtime image's apt install for this.
@@ -104,9 +110,12 @@ Still open, not urgent:
   which is fine for this app's concurrency level. Worth an explicit `max_connections`
   decision only if usage grows; no action needed now.
 
-Volume gotchas — the ownership one below is now handled by §3's non-root setup:
+Volume gotchas:
 - WAL creates `todo.db-wal` and `todo.db-shm` next to the main file — the **directory**
-  needs to be writable, not just the db file. Already true: `/data` is owned by `app`.
+  needs to be writable, not just the db file. In prod, `/data` is bind-mounted to
+  `${DATA_ROOT}/little-orderings/app-data`, `chown`'d to uid 10001 by the provisioning
+  script (§3) — not the Docker-managed-volume auto-ownership trick, since this is a
+  bind mount.
 
 ---
 
@@ -152,14 +161,23 @@ standalone files are easier to reason about):
   - ✅ `SESSION_SECRET` and the admin account (`ADMIN_USERNAME`/`ADMIN_EMAIL`/
     `ADMIN_PASSWORD`) come from `env_file: .env` — nothing sensitive is inline in the
     committed file. See `.env.example` (added) for what the server's real `.env` needs.
-  - ✅ `caddy` service added: `caddy:2-alpine`, named volumes `caddy-data`/
-    `caddy-config` for the TLS cert/account key so they survive restarts.
+  - ✅ `caddy` service added: `caddy:2-alpine`, volumes `caddy-data`/`caddy-config` for
+    the TLS cert/account key so they survive restarts.
   - ✅ `restart: unless-stopped` on `app` and `caddy`.
   - ✅ `json-file` logging capped at `max-size: 10m, max-file: 3` on both services.
   - ✅ Healthcheck comes from the Dockerfile's `HEALTHCHECK` (§3) — no separate
     Compose-level `healthcheck:` needed since it's baked into the image.
+  - ✅ **`app-data`/`caddy-data`/`caddy-config` are bind-mounted to the attached
+    volume**, not Docker-managed named volumes — `local` driver with `driver_opts:
+    {type: none, o: bind, device: ${DATA_ROOT:-/mnt/HC_Volume_106548799}/little-orderings/...}`.
+    `DATA_ROOT` is read from `.env` (added to `.env.example`) so the compose file and
+    `deploy/provision-server.sh` share one source of truth for the path. Validated with
+    `docker compose config` using different `DATA_ROOT` values — interpolates
+    correctly.
 
-Run production with `docker compose -f docker-compose.prod.yml up -d`.
+Run production with `docker compose -f docker-compose.prod.yml up -d`. The target
+directories must exist and be owned correctly before first run — that's what
+`deploy/provision-server.sh` does (§1, not yet run against the real box).
 
 ---
 
@@ -205,9 +223,10 @@ gitignored already; the prod one is a separate, server-only file.)
 
 Required contents (per `.env.example`): `SESSION_SECRET` (32+ random bytes, base64 —
 generate on the server with `openssl rand -base64 32`, not locally, not in chat, not
-in a commit), and `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` for the account the
-`init-user` service creates on first boot. Add a GHCR token here too once build
-strategy moves to off-box (§5).
+in a commit), `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` for the account the
+`init-user` service creates on first boot, and `DATA_ROOT` (not sensitive, just kept
+here so it's one source of truth with the provisioning script — see §6). Add a GHCR
+token here too once build strategy moves to off-box (§5).
 
 ---
 
@@ -240,14 +259,17 @@ Struck-through items are done; the rest is what's actually left.
    `Caddyfile`, `.env.example` all added 2026-08-05. Validated with
    `docker compose -f docker-compose.prod.yml config`; not yet run against the real
    server.
-7. **Next:** server prep — Docker install, firewall, `docker context create` pointed
-   at the box, swapfile (cold build risk from §1 still applies under `docker context`,
-   since the build runs on the server's daemon either way).
-8. Confirm `dig todo.gerrietts.net` resolves **before** first `docker compose up`.
-9. Create the real `.env` on the server from `.env.example`, `chmod 600`.
-10. Deploy with ACME staging, verify, switch to production CA.
-11. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
-12. Once the `docker context` flow is proven: wire up GitHub Actions + GHCR (§5).
+7. ~~Write the server provisioning script~~ — `deploy/provision-server.sh` added
+   2026-08-05: installs Docker, creates the `deploy` user (docker-group, copies root's
+   SSH key), configures `ufw`, creates and `chown`s the `DATA_ROOT` directories, sets
+   up a swapfile. Idempotent, not yet run against the real box.
+8. **Next:** run the provisioning script against the real server, then
+   `docker context create` from the local machine pointed at it.
+9. Confirm `dig todo.gerrietts.net` resolves **before** first `docker compose up`.
+10. Create the real `.env` on the server from `.env.example`, `chmod 600`.
+11. Deploy with ACME staging, verify, switch to production CA.
+12. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
+13. Once the `docker context` flow is proven: wire up GitHub Actions + GHCR (§5).
 
 ## Open decisions
 
@@ -256,6 +278,11 @@ Struck-through items are done; the rest is what's actually left.
 - [x] ~~Leptos SSR vs CSR~~ — resolved: React CSR, single Axum-served origin
 - [x] ~~SQLite WAL/busy_timeout/synchronous~~ — done
 - [x] ~~Non-root container user~~ — done
+- [x] ~~How to provision the server (packages, non-root user, data volume)~~ — scripted
+  in `deploy/provision-server.sh`, not yet executed
 - [ ] Backup destination (Hetzner Storage Box vs S3 vs rsync target)
 - [ ] Whether to add external uptime monitoring now or later
 - [ ] Whether `/health` should check the DB pool (`SELECT 1`) — currently a static 200
+- [ ] Whether to disable root SSH login once the `deploy` user is confirmed working —
+  provisioning script deliberately leaves root login enabled for now, to avoid
+  lockout risk on the first pass

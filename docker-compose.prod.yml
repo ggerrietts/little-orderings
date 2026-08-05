@@ -54,5 +54,20 @@ services:
 
 volumes:
   app-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_ROOT:-/mnt/HC_Volume_106548799}/little-orderings/app-data
   caddy-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_ROOT:-/mnt/HC_Volume_106548799}/little-orderings/caddy-data
   caddy-config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_ROOT:-/mnt/HC_Volume_106548799}/little-orderings/caddy-config
