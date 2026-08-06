@@ -16,11 +16,8 @@
 #   APP_NAME       little-orderings           Subdirectory name under DATA_ROOT
 #   SWAP_SIZE_GB   2                          Swapfile size, general OOM safety margin on
 #                                              a 4GB box. Set to 0 to skip entirely.
-#   GHCR_USER      (unset)                    GitHub username, to `docker login ghcr.io`
-#   GHCR_TOKEN     (unset)                    PAT with read:packages, for the same login.
-#                                              Both required together, or skip and log in
-#                                              manually later — the repo is private, so
-#                                              `docker compose pull` won't work without this.
+#
+# The GHCR image is public, so no registry login is needed on this box.
 
 set -euo pipefail
 
@@ -29,8 +26,6 @@ DEPLOY_USER="${DEPLOY_USER:-deploy}"
 APP_UID="${APP_UID:-10001}"
 APP_NAME="${APP_NAME:-little-orderings}"
 SWAP_SIZE_GB="${SWAP_SIZE_GB:-2}"
-GHCR_USER="${GHCR_USER:-}"
-GHCR_TOKEN="${GHCR_TOKEN:-}"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run as root." >&2
@@ -107,14 +102,6 @@ if [[ "${SWAP_SIZE_GB}" != "0" ]]; then
   fi
 else
   echo "==> SWAP_SIZE_GB=0, skipping swapfile"
-fi
-
-echo "==> GHCR login (so 'docker compose pull' can reach the private image)"
-if [[ -n "${GHCR_USER}" && -n "${GHCR_TOKEN}" ]]; then
-  su - "${DEPLOY_USER}" -c "echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USER}' --password-stdin"
-else
-  echo "    GHCR_USER/GHCR_TOKEN not set — skipping. Before the first deploy, run as"
-  echo "    ${DEPLOY_USER}: echo \$GHCR_TOKEN | docker login ghcr.io -u <github-username> --password-stdin"
 fi
 
 cat <<EOF

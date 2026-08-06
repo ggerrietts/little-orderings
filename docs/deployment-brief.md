@@ -147,9 +147,11 @@ step at any point.**
   file with no `build:` key is a no-op for those services).
 - `docker context` is still useful — it's just scoped to `pull`/`up`, never `--build`,
   so no source ever transits it.
-- The repo is **private**, so the pushed image is private too — the server needs a
-  one-time `docker login ghcr.io` with a `read:packages` token before its first pull
-  (§9, scripted as an optional step in `deploy/provision-server.sh`).
+- **Decision (2026-08-06): the repo and its GHCR image are going public.** No
+  registry login on the server, ever — `docker compose pull` works unauthenticated.
+  The provisioning script's earlier optional GHCR-login step was removed for exactly
+  this reason (see §9) — keeping unused auth logic around was against the "as little
+  as possible on the server" goal that drove this whole section in the first place.
 - Images are tagged by git SHA as well as `latest`, so rollback is "set `IMAGE_TAG` to
   a previous SHA and `up -d`" without rebuilding anything.
 
@@ -243,14 +245,13 @@ in a commit), `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` for the account th
 `init-user` service creates on first boot, and `DATA_ROOT` (not sensitive, just kept
 here so it's one source of truth with the provisioning script — see §6).
 
-**GHCR pull token — separate from `.env` on purpose.** The repo (and so the pushed
-image) is private, so the server needs to authenticate to pull. This doesn't go in
-`.env`/`env_file:` — that would inject it into the app containers' environment for no
-reason. Instead it's a one-time `docker login ghcr.io` as the `deploy` user, which
-caches credentials in that user's own Docker config. `deploy/provision-server.sh` does
-this automatically if run with `GHCR_USER`/`GHCR_TOKEN` set (a GitHub PAT scoped to
-just `read:packages`); otherwise it prints the manual command to run once before the
-first pull.
+**No GHCR pull token.** Removed 2026-08-06 along with the repo going public — the
+image is now anonymously pullable, so there's nothing to authenticate on this box at
+all. `deploy/provision-server.sh` no longer has any registry-login logic; if this
+repo/image ever goes private again, that step would need to be added back (a one-time
+`docker login ghcr.io` as the `deploy` user, credentials cached in that user's own
+Docker config — not via `.env`/`env_file:`, which would leak into the app containers'
+environment for no reason).
 
 ---
 
@@ -287,25 +288,31 @@ Struck-through items are done; the rest is what's actually left.
    Validated with `docker compose -f docker-compose.prod.yml config`; not yet run
    against the real server.
 7. ~~Write the server provisioning script~~ — `deploy/provision-server.sh` added
-   2026-08-05, revised same day to drop the buildx plugin (nothing builds on this
-   box) and add an optional GHCR login step. Installs Docker + compose plugin only,
-   creates the `deploy` user, configures `ufw`, creates and `chown`s the `DATA_ROOT`
-   directories, sets up a swapfile (general safety margin now, not build-OOM
-   avoidance — the reason that mattered is gone). Idempotent, not yet run against the
-   real box.
+   2026-08-05, revised twice same week: dropped the buildx plugin (nothing builds on
+   this box); added, then removed, a GHCR login step (added 2026-08-05 while the repo
+   was private, removed 2026-08-06 once the decision to go public made it dead code).
+   Installs Docker + compose plugin only, creates the `deploy` user, configures `ufw`,
+   creates and `chown`s the `DATA_ROOT` directories, sets up a swapfile (general
+   safety margin now, not build-OOM avoidance — the reason that mattered is gone).
+   Idempotent, not yet run against the real box.
 8. ~~Write the GitHub Actions build/push workflow~~ — `.github/workflows/build-and-push.yml`
    added 2026-08-05: builds on `push` to `main` or manual dispatch, pushes to
    `ghcr.io/ggerrietts/little-orderings` tagged `latest` + git SHA, using the
    repo-scoped `GITHUB_TOKEN` (no extra secret needed to push). Not yet triggered.
-9. **Next:** run the provisioning script against the real server (with
-   `GHCR_USER`/`GHCR_TOKEN` set, or log in manually after), then `docker context
-   create` from the local machine pointed at it.
-10. Push to `main` (or trigger the workflow manually) to get a first image into GHCR.
-11. Confirm `dig todo.gerrietts.net` resolves **before** first `docker compose up`.
-12. Create the real `.env` on the server from `.env.example`, `chmod 600`.
-13. Deploy with ACME staging (`docker compose pull && up -d`), verify, switch to
+9. ~~Sanitization pass before making the repo public~~ — done 2026-08-06: full-history
+   scan for secrets, credentials, private keys, PII came back clean. Two minor items
+   surfaced and were deliberately left as-is by choice: the old-employer commit-author
+   email in early history, and the literal Hetzner volume ID as a default value.
+10. **Next:** run the provisioning script against the real server, then `docker
+    context create` from the local machine pointed at it.
+11. Push to `main` (or trigger the workflow manually) to get a first image into GHCR.
+    Make the GHCR package public once it exists (Package settings → Change visibility)
+    — pushing doesn't do this automatically even once the repo itself is public.
+12. Confirm `dig todo.gerrietts.net` resolves **before** first `docker compose up`.
+13. Create the real `.env` on the server from `.env.example`, `chmod 600`.
+14. Deploy with ACME staging (`docker compose pull && up -d`), verify, switch to
     production CA.
-14. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
+15. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
 
 ## Open decisions
 
@@ -316,9 +323,9 @@ Struck-through items are done; the rest is what's actually left.
 - [x] ~~Non-root container user~~ — done
 - [x] ~~How to provision the server (packages, non-root user, data volume)~~ — scripted
   in `deploy/provision-server.sh`, not yet executed
-- [ ] GHCR package visibility — currently private (matches the private repo), needs a
-  one-time `docker login` on the server. Could be flipped to public to skip that, at
-  the cost of the image (not the source) being world-readable.
+- [x] ~~GHCR package visibility~~ — decided 2026-08-06: public, matching the repo.
+  Registry-login logic removed from the provisioning script. Still needs the actual
+  GitHub package-visibility toggle flipped once a first image has been pushed (§11).
 - [ ] Backup destination (Hetzner Storage Box vs S3 vs rsync target)
 - [ ] Whether to add external uptime monitoring now or later
 - [ ] Whether `/health` should check the DB pool (`SELECT 1`) — currently a static 200
