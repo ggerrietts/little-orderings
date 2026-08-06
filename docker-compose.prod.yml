@@ -1,0 +1,73 @@
+services:
+  init-user:
+    image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}
+    volumes:
+      - app-data:/data
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:/data/todo.db
+    entrypoint: >
+      sh -c "
+        ./little-orderings user create \"$$ADMIN_USERNAME\" \"$$ADMIN_EMAIL\" \"$$ADMIN_PASSWORD\" || true
+      "
+
+  app:
+    image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}
+    expose:
+      - "3000"
+    volumes:
+      - app-data:/data
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:/data/todo.db
+      HOST: 0.0.0.0
+      PORT: "3000"
+      ALLOWED_ORIGIN: https://todo.gerrietts.net
+      RUST_LOG: info
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      init-user:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      - app
+
+volumes:
+  app-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_ROOT:-/mnt/HC_Volume_106548799}/little-orderings/app-data
+  caddy-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_ROOT:-/mnt/HC_Volume_106548799}/little-orderings/caddy-data
+  caddy-config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_ROOT:-/mnt/HC_Volume_106548799}/little-orderings/caddy-config
