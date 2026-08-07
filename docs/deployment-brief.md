@@ -77,7 +77,7 @@ Already true, no action needed:
   (§6), and bind mounts do **not** get this treatment. For prod, ownership of that
   directory is instead set explicitly by `deploy/provision-server.sh` (`chown
   10001:10001`, kept in sync with this uid via its `APP_UID` var). Verified via
-  `docker compose config`; `init-user` and `app` both inherit the image's `USER app`.
+  `docker compose config`; `app` inherits the image's `USER app`.
 - ✅ **`HEALTHCHECK`** added to the Dockerfile (`curl -f http://127.0.0.1:3000/health`,
   30s interval). `curl` added to the runtime image's apt install for this.
 
@@ -141,10 +141,10 @@ step at any point.**
   Source code touches GitHub's ephemeral runners, same as any normal CI build — never
   the server.
 - **The server only ever runs** `docker compose -f docker-compose.prod.yml pull` then
-  `up -d`. `docker-compose.prod.yml` now references `image: ghcr.io/...` for both
-  `init-user` and `app` — there's no `build:` key in that file at all, so it's not
-  possible to accidentally build there even by habit (`up -d --build` on a compose
-  file with no `build:` key is a no-op for those services).
+  `up -d`. `docker-compose.prod.yml` now references `image: ghcr.io/...` for `app` —
+  there's no `build:` key in that file at all, so it's not possible to accidentally
+  build there even by habit (`up -d --build` on a compose file with no `build:` key is
+  a no-op for that service).
 - `docker context` is still useful — it's just scoped to `pull`/`up`, never `--build`,
   so no source ever transits it.
 - **Decision (2026-08-06): the repo and its GHCR image are going public.** No
@@ -170,9 +170,17 @@ standalone files are easier to reason about):
   - ✅ `app` uses `expose: ["3000"]`, **no host port published** — only `caddy` binds
     to the host, on 80/443. This was called out as the one item with real security
     consequences if skipped, and it's now closed.
-  - ✅ `SESSION_SECRET` and the admin account (`ADMIN_USERNAME`/`ADMIN_EMAIL`/
-    `ADMIN_PASSWORD`) come from `env_file: .env` — nothing sensitive is inline in the
-    committed file. See `.env.example` (added) for what the server's real `.env` needs.
+  - ✅ `SESSION_SECRET` comes from `env_file: .env` — nothing sensitive is inline in
+    the committed file. See `.env.example` (added) for what the server's real `.env`
+    needs.
+  - ✅ **`init-user` service removed (2026-08-06).** It bootstrapped an admin account
+    from `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` via a fixed
+    `entrypoint: sh -c "..."`. Turned out that pattern silently ignores any command
+    `docker compose run` appends (extra args become unused positional params inside
+    the `sh -c` script), so it only ever worked for creating exactly the ADMIN_* user
+    baked into `.env` — not a general mechanism, and misleading alongside the `user`
+    CLI subcommand. Replaced by running `deploy/admin.sh add-user` once, manually,
+    after the first deploy. `app`'s `depends_on: init-user` went with it.
   - ✅ `caddy` service added: `caddy:2-alpine`, volumes `caddy-data`/`caddy-config` for
     the TLS cert/account key so they survive restarts.
   - ✅ `restart: unless-stopped` on `app` and `caddy`.
@@ -186,9 +194,17 @@ standalone files are easier to reason about):
     `deploy/provision-server.sh` share one source of truth for the path. Validated with
     `docker compose config` using different `DATA_ROOT` values — interpolates
     correctly.
-  - ✅ **`init-user` and `app` use `image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}`**,
+  - ✅ **`app` uses `image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}`**,
     no `build:` key at all (revised 2026-08-05, see §5) — this file cannot build,
     only pull and run.
+
+**Getting the compose file, `Caddyfile`, and `.env.example` onto the server:**
+`deploy/admin.sh sync` (added 2026-08-06) `scp`s all three from the repo to
+`~/little-orderings` on the server — `docker-compose.prod.yml` renamed to
+`docker-compose.yml` there, matching what `deploy/admin.sh restart` and the manual
+`docker compose` commands below both expect to find. It never touches `.env` itself
+(server-only, holds real secrets) — it just warns if `.env` doesn't exist yet so you
+remember to create it from the freshly-synced `.env.example`.
 
 Run production with `docker compose -f docker-compose.prod.yml pull && docker compose
 -f docker-compose.prod.yml up -d` — deliberately two steps, not `up -d --build` (which
@@ -241,9 +257,10 @@ gitignored already; the prod one is a separate, server-only file.)
 
 Required contents (per `.env.example`): `SESSION_SECRET` (32+ random bytes, base64 —
 generate on the server with `openssl rand -base64 32`, not locally, not in chat, not
-in a commit), `ADMIN_USERNAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` for the account the
-`init-user` service creates on first boot, and `DATA_ROOT` (not sensitive, just kept
-here so it's one source of truth with the provisioning script — see §6).
+in a commit) and `DATA_ROOT` (not sensitive, just kept here so it's one source of
+truth with the provisioning script — see §6). No admin credentials go in `.env` —
+the first account is created after the stack is up, by running
+`deploy/admin.sh add-user <username> <email> <password>` once (see §6).
 
 **No GHCR pull token.** Removed 2026-08-06 along with the repo going public — the
 image is now anonymously pullable, so there's nothing to authenticate on this box at
@@ -298,21 +315,36 @@ Struck-through items are done; the rest is what's actually left.
 8. ~~Write the GitHub Actions build/push workflow~~ — `.github/workflows/build-and-push.yml`
    added 2026-08-05: builds on `push` to `main` or manual dispatch, pushes to
    `ghcr.io/ggerrietts/little-orderings` tagged `latest` + git SHA, using the
-   repo-scoped `GITHUB_TOKEN` (no extra secret needed to push). Not yet triggered.
+   repo-scoped `GITHUB_TOKEN` (no extra secret needed to push).
 9. ~~Sanitization pass before making the repo public~~ — done 2026-08-06: full-history
    scan for secrets, credentials, private keys, PII came back clean. Two minor items
    surfaced and were deliberately left as-is by choice: the old-employer commit-author
    email in early history, and the literal Hetzner volume ID as a default value.
-10. **Next:** run the provisioning script against the real server, then `docker
-    context create` from the local machine pointed at it.
-11. Push to `main` (or trigger the workflow manually) to get a first image into GHCR.
-    Make the GHCR package public once it exists (Package settings → Change visibility)
-    — pushing doesn't do this automatically even once the repo itself is public.
-12. Confirm `dig todo.gerrietts.net` resolves **before** first `docker compose up`.
-13. Create the real `.env` on the server from `.env.example`, `chmod 600`.
-14. Deploy with ACME staging (`docker compose pull && up -d`), verify, switch to
-    production CA.
-15. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
+10. ~~Get a first image into GHCR~~ — done 2026-08-06: merging the PR pushed to `main`,
+    but the workflow didn't auto-fire on that push for unclear reasons (zero prior runs
+    existed), so it was triggered manually via `workflow_dispatch`. Build succeeded;
+    `ghcr.io/ggerrietts/little-orderings:latest` confirmed public via the GHCR API —
+    no manual visibility toggle needed after all.
+11. ~~Write admin tooling for day-2 operations~~ — `deploy/admin.sh` added 2026-08-06:
+    `sync` (see §6), `restart` (pull + up -d), `add-user`, `set-password`. Runs from
+    your local machine over SSH — deliberately **not** `docker context`, since
+    `docker-compose.prod.yml` bind-mounts `./Caddyfile` and bind-mount sources are
+    resolved by whichever engine executes the command. Pointing a local `docker
+    compose` at a remote context via `docker context` would try to resolve that path
+    against your local filesystem, not the server's — so compose has to actually run
+    on the server. `deploy/provision-server.sh` creates the `deploy` user compose runs
+    as; it doesn't need `docker context` to do that.
+12. **Next:** run `deploy/provision-server.sh` against the real server (not yet done).
+13. Confirm `dig todo.gerrietts.net` resolves **before** first deploy.
+14. `deploy/admin.sh sync` to copy `docker-compose.prod.yml` → `docker-compose.yml`,
+    `Caddyfile`, and `.env.example` to `~/little-orderings` on the server.
+15. Create the real `.env` there from the synced `.env.example`
+    (`SESSION_SECRET` via `openssl rand -base64 32`, confirm `DATA_ROOT`), `chmod 600`.
+16. Deploy with ACME staging first if there's any doubt DNS is live (§7):
+    `deploy/admin.sh restart` (pull + up -d), verify, switch to production CA.
+17. `deploy/admin.sh add-user <username> <email> <password>` — create the first
+    account. No more automatic bootstrap from `ADMIN_*` env vars (§6/§9).
+18. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
 
 ## Open decisions
 
@@ -324,8 +356,16 @@ Struck-through items are done; the rest is what's actually left.
 - [x] ~~How to provision the server (packages, non-root user, data volume)~~ — scripted
   in `deploy/provision-server.sh`, not yet executed
 - [x] ~~GHCR package visibility~~ — decided 2026-08-06: public, matching the repo.
-  Registry-login logic removed from the provisioning script. Still needs the actual
-  GitHub package-visibility toggle flipped once a first image has been pushed (§11).
+  Registry-login logic removed from the provisioning script. Confirmed already public
+  via the GHCR API once the first image was pushed (§11) — no manual toggle needed.
+- [x] ~~How to run day-2 admin commands (user management, restarts) against the
+  server~~ — decided 2026-08-06: `deploy/admin.sh`, SSH-driven from the local
+  machine, not `docker context` (§11).
+- [x] ~~How the first admin account gets created~~ — decided 2026-08-06: manually,
+  via `deploy/admin.sh add-user` after first deploy. The `init-user` service's
+  automatic bootstrap was removed — its fixed entrypoint silently ignored any
+  command appended to it, so it only ever worked for the exact `ADMIN_*` values in
+  `.env`, never as a general mechanism (§6).
 - [ ] Backup destination (Hetzner Storage Box vs S3 vs rsync target)
 - [ ] Whether to add external uptime monitoring now or later
 - [ ] Whether `/health` should check the DB pool (`SELECT 1`) — currently a static 200
