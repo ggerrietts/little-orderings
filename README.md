@@ -33,21 +33,23 @@ To change the default user or add more users before first start, edit the `init-
 
 ## Managing Users
 
-The binary includes a `user` subcommand for managing accounts. In a Docker deployment, run it against the same data volume:
+The binary includes a `user` subcommand for managing accounts. In a Docker deployment, run it against the `app` service, which shares the same data volume:
 
 ```sh
 # Create a user
-docker compose run --rm init-user ./little-orderings user create <username> <email> <password>
+docker compose run --rm app ./little-orderings user create <username> <email> <password>
 
 # List all users
-docker compose run --rm init-user ./little-orderings user list
+docker compose run --rm app ./little-orderings user list
 
 # Change a password
-docker compose run --rm init-user ./little-orderings user set-password <username> <newpassword>
+docker compose run --rm app ./little-orderings user set-password <username> <newpassword>
 
 # Delete a user
-docker compose run --rm init-user ./little-orderings user delete <username>
+docker compose run --rm app ./little-orderings user delete <username>
 ```
+
+Don't run these against the local dev compose file's `init-user` service (it creates the default `testuser`/`changeme` account above) — it has a fixed `entrypoint: sh -c "..."` that ignores any command `docker compose run` appends, so `docker compose run --rm init-user ./little-orderings user create ...` silently no-ops instead of creating the named user. In production there's no `init-user` service at all; see `deploy/admin.sh add-user` in the deployment docs.
 
 If running the binary directly (not via Docker), set `DATABASE_URL` first:
 

@@ -1,16 +1,4 @@
 services:
-  init-user:
-    image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}
-    volumes:
-      - app-data:/data
-    env_file: .env
-    environment:
-      DATABASE_URL: sqlite:/data/todo.db
-    entrypoint: >
-      sh -c "
-        ./little-orderings user create \"$$ADMIN_USERNAME\" \"$$ADMIN_EMAIL\" \"$$ADMIN_PASSWORD\" || true
-      "
-
   app:
     image: ghcr.io/ggerrietts/little-orderings:${IMAGE_TAG:-latest}
     expose:
@@ -30,9 +18,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    depends_on:
-      init-user:
-        condition: service_completed_successfully
 
   caddy:
     image: caddy:2-alpine
