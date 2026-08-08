@@ -84,6 +84,12 @@ export const projects = {
 
   removeMember: (id: number, userId: number) =>
     request<void>(`/api/projects/${id}/members/${userId}`, { method: 'DELETE' }),
+
+  updateMemberRole: (id: number, userId: number, role: string) =>
+    request<void>(`/api/projects/${id}/members/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    }),
 };
 
 export const watches = {
@@ -115,6 +121,11 @@ export const pushSubscriptions = {
       method: 'DELETE',
       body: JSON.stringify({ endpoint }),
     }),
+};
+
+export const users = {
+  list: () =>
+    request<User[]>('/api/users'),
 };
 
 // ── Milestones ────────────────────────────────────────────────────────────────
