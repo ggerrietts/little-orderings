@@ -29,7 +29,13 @@ export function WatchToggle({
         onChange(null)
       } else {
         await watches.set(projectId, value as Tier)
-        await subscribeToPush()
+        try {
+          await subscribeToPush()
+        } catch {
+          // watch preference already saved above; a failed subscribe (e.g. iOS
+          // Safari before Add to Home Screen) shouldn't block the UI from
+          // reflecting the saved tier
+        }
         onChange(value)
       }
     } finally {

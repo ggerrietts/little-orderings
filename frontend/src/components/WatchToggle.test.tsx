@@ -47,3 +47,17 @@ test('selecting "Not watching" calls watches.remove, then onChange with null', a
   expect(mockWatches.remove).toHaveBeenCalledWith(1)
   expect(onChange).toHaveBeenCalledWith(null)
 })
+
+test('onChange still fires when subscribeToPush rejects (e.g. iOS Safari before Add to Home Screen)', async () => {
+  const user = userEvent.setup()
+  const onChange = vi.fn()
+  ;(push.subscribeToPush as ReturnType<typeof vi.fn>).mockRejectedValue(
+    new Error('pushManager.subscribe is not supported')
+  )
+  render(<WatchToggle projectId={1} currentTier={null} onChange={onChange} />)
+
+  await user.selectOptions(screen.getByRole('combobox'), 'milestones')
+
+  expect(mockWatches.set).toHaveBeenCalledWith(1, 'milestones')
+  expect(onChange).toHaveBeenCalledWith('milestones')
+})
