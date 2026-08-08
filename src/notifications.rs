@@ -30,12 +30,19 @@ struct Subscription {
 /// a slow or failed push send must never roll back the actual data change.
 /// Failures are logged and swallowed; there is no retry queue (spec §8).
 pub async fn notify_watchers(pool: &SqlitePool, project_id: i64, event_tier: Tier) {
-    let project_name: Option<(String,)> =
-        sqlx::query_as("SELECT name FROM projects WHERE id = ?")
-            .bind(project_id)
-            .fetch_optional(pool)
-            .await
-            .unwrap_or(None);
+    let project_name: Option<(String,)> = match sqlx::query_as(
+        "SELECT name FROM projects WHERE id = ?",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            tracing::warn!("failed to load project {project_id}: {e}");
+            return;
+        }
+    };
     let Some((project_name,)) = project_name else {
         return;
     };
@@ -84,14 +91,19 @@ async fn notify_one_watcher(pool: &SqlitePool, project_id: i64, user_id: i64, pr
         send_to_subscriptions(pool, project_id, project_name, subscriptions).await;
     }
 
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "UPDATE project_watches SET notified_at = CURRENT_TIMESTAMP
          WHERE project_id = ? AND user_id = ?",
     )
     .bind(project_id)
     .bind(user_id)
     .execute(pool)
-    .await;
+    .await
+    {
+        tracing::warn!(
+            "failed to mark project {project_id} watch notified for user {user_id}: {e}"
+        );
+    }
 }
 
 async fn send_to_subscriptions(
@@ -167,10 +179,16 @@ async fn send_to_subscriptions(
         match client.send(message).await {
             Ok(()) => {}
             Err(WebPushError::EndpointNotValid(_)) | Err(WebPushError::EndpointNotFound(_)) => {
-                let _ = sqlx::query("DELETE FROM push_subscriptions WHERE id = ?")
+                if let Err(e) = sqlx::query("DELETE FROM push_subscriptions WHERE id = ?")
                     .bind(sub.id)
                     .execute(pool)
-                    .await;
+                    .await
+                {
+                    tracing::warn!(
+                        "failed to delete dead subscription {}: {e}",
+                        sub.id
+                    );
+                }
             }
             Err(e) => {
                 tracing::warn!("push send failed for subscription {}: {e}", sub.id);
