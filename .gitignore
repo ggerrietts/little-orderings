@@ -2,6 +2,7 @@ target/
 todo.db
 bindings/
 .env
+deploy/prod.env
 .claude/
 .idea/
 .superpowers/

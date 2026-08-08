@@ -38,6 +38,10 @@ Usage: $(basename "$0") <command> [args...]
 Commands:
   sync                                  Copy docker-compose.prod.yml, Caddyfile, and
                                          .env.example to the server
+  push-env                              Push deploy/prod.env (gitignored, local-only) to
+                                         the server as .env — kept separate from sync
+                                         since overwriting secrets is a bigger deal than
+                                         overwriting the compose file
   restart                               Pull the latest image and (re)start the stack
   add-user <username> <email> <password>
                                          Create a user
@@ -71,6 +75,18 @@ cmd_sync() {
   fi
 }
 
+cmd_push_env() {
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if [[ ! -f "${repo_root}/deploy/prod.env" ]]; then
+    echo "deploy/prod.env not found. Bootstrap it once, then fill in new keys:" >&2
+    echo "  scp ${TARGET}:${REMOTE_DIR}/.env deploy/prod.env" >&2
+    exit 1
+  fi
+  scp "${repo_root}/deploy/prod.env" "${TARGET}:${REMOTE_DIR}/.env"
+  ssh "${TARGET}" "chmod 600 ${REMOTE_DIR}/.env"
+}
+
 cmd_restart() {
   ssh "${TARGET}" "cd ${REMOTE_DIR} && docker compose -f docker-compose.yml pull && docker compose -f docker-compose.yml up -d"
 }
@@ -87,6 +103,7 @@ cmd_set_password() {
 
 case "${1:-}" in
   sync) cmd_sync ;;
+  push-env) cmd_push_env ;;
   restart|start) cmd_restart ;;
   add-user) shift; cmd_add_user "$@" ;;
   set-password) shift; cmd_set_password "$@" ;;
