@@ -59,3 +59,11 @@ test('shown with manual explainer on mobile Safari with no beforeinstallprompt',
   await user.click(button)
   expect(screen.getByText(/add to home screen/i)).toBeInTheDocument()
 })
+
+test('hidden on Chrome-on-iOS with no beforeinstallprompt captured', () => {
+  mockUserAgent(
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/119.0.6045.109 Mobile/15E148 Safari/604.1'
+  )
+  render(<InstallLink />)
+  expect(screen.queryByRole('button', { name: /install/i })).not.toBeInTheDocument()
+})

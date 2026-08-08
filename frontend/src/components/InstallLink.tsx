@@ -13,7 +13,11 @@ function isStandalone(): boolean {
 
 function isSafariOnMobile(): boolean {
   const ua = window.navigator.userAgent
-  const isSafari = /^((?!chrome|android).)*safari/i.test(ua)
+  // Other iOS browsers (Chrome, Firefox, Edge, Opera) run on Safari's WebKit
+  // engine and their UA strings contain "Safari" too — exclude their own
+  // tokens (CriOS/FxiOS/EdgiOS/OPiOS) alongside chrome/android, or they'd be
+  // misclassified as Safari here.
+  const isSafari = /^((?!chrome|android|crios|fxios|edgios|opios).)*safari/i.test(ua)
   const isMobile = /iPhone|iPad|iPod|Android/i.test(ua)
   return isSafari && isMobile
 }
