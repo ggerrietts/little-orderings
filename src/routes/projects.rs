@@ -169,6 +169,8 @@ pub async fn update_project(
     .fetch_one(&state.pool)
     .await?;
 
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+
     Ok(Json(project))
 }
 
@@ -185,6 +187,8 @@ pub async fn archive_project(
     .bind(project_id)
     .execute(&state.pool)
     .await?;
+
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -239,6 +243,8 @@ pub async fn add_member(
         }
     })?;
 
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+
     Ok(StatusCode::CREATED)
 }
 
@@ -279,6 +285,8 @@ pub async fn remove_member(
             AppError::NotFound
         });
     }
+
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
