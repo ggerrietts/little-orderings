@@ -95,13 +95,13 @@ export const watches = {
 
   remove: (projectId: number) =>
     request<void>(`/api/projects/${projectId}/watch`, { method: 'DELETE' }),
-}
+};
 
 export type PushSubscriptionInput = {
   endpoint: string
   p256dh_key: string
   auth_key: string
-}
+};
 
 export const pushSubscriptions = {
   create: (subscription: PushSubscriptionInput) =>
@@ -115,7 +115,7 @@ export const pushSubscriptions = {
       method: 'DELETE',
       body: JSON.stringify({ endpoint }),
     }),
-}
+};
 
 // ── Milestones ────────────────────────────────────────────────────────────────
 
