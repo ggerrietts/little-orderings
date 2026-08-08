@@ -14,7 +14,7 @@ export function MembersTab() {
   const [selectedRole, setSelectedRole] = useState<string>('member')
   const [error, setError] = useState<string | null>(null)
 
-  const currentRole = members.find(m => m.username === currentUser?.username)?.role
+  const currentRole = members.find(m => m.user_id === currentUser?.id)?.role
   const isOwner = currentRole === 'owner'
 
   useEffect(() => {

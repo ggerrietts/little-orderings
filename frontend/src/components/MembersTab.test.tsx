@@ -22,6 +22,9 @@ const owner: ProjectMember = { user_id: 1, username: 'alice', email: 'alice@exam
 const memberRow: ProjectMember = { user_id: 2, username: 'bob', email: 'bob@example.com', role: 'member' }
 const otherUser: User = { id: 3, username: 'carol', email: 'carol@example.com', created_at: null }
 
+const ownerUser: User = { id: 1, username: 'alice', email: 'alice@example.com', created_at: null }
+const memberUser: User = { id: 2, username: 'bob', email: 'bob@example.com', created_at: null }
+
 const addMember = vi.fn()
 const removeMember = vi.fn()
 const updateMemberRole = vi.fn()
@@ -41,7 +44,7 @@ beforeEach(() => {
 })
 
 test('non-owner sees a read-only role badge, no controls', async () => {
-  mockUseAuth.mockReturnValue({ user: memberRow } as unknown as ReturnType<typeof authContext.useAuth>)
+  mockUseAuth.mockReturnValue({ user: memberUser } as unknown as ReturnType<typeof authContext.useAuth>)
   mockProject([owner, memberRow])
 
   render(<MembersTab />)
@@ -54,7 +57,7 @@ test('non-owner sees a read-only role badge, no controls', async () => {
 
 test('owner can change a member\'s role', async () => {
   const user = userEvent.setup()
-  mockUseAuth.mockReturnValue({ user: owner } as unknown as ReturnType<typeof authContext.useAuth>)
+  mockUseAuth.mockReturnValue({ user: ownerUser } as unknown as ReturnType<typeof authContext.useAuth>)
   mockProject([owner, memberRow])
 
   render(<MembersTab />)
@@ -66,7 +69,7 @@ test('owner can change a member\'s role', async () => {
 
 test('owner can remove a member', async () => {
   const user = userEvent.setup()
-  mockUseAuth.mockReturnValue({ user: owner } as unknown as ReturnType<typeof authContext.useAuth>)
+  mockUseAuth.mockReturnValue({ user: ownerUser } as unknown as ReturnType<typeof authContext.useAuth>)
   mockProject([owner, memberRow])
 
   render(<MembersTab />)
@@ -78,7 +81,7 @@ test('owner can remove a member', async () => {
 
 test('owner can add a non-member user', async () => {
   const user = userEvent.setup()
-  mockUseAuth.mockReturnValue({ user: owner } as unknown as ReturnType<typeof authContext.useAuth>)
+  mockUseAuth.mockReturnValue({ user: ownerUser } as unknown as ReturnType<typeof authContext.useAuth>)
   mockProject([owner, memberRow])
 
   render(<MembersTab />)
@@ -90,7 +93,7 @@ test('owner can add a non-member user', async () => {
 })
 
 test('add section is hidden once every user is already a member', async () => {
-  mockUseAuth.mockReturnValue({ user: owner } as unknown as ReturnType<typeof authContext.useAuth>)
+  mockUseAuth.mockReturnValue({ user: ownerUser } as unknown as ReturnType<typeof authContext.useAuth>)
   mockUsersList.mockResolvedValue([])
   mockProject([owner, memberRow])
 
