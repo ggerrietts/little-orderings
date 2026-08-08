@@ -1763,6 +1763,7 @@ dependencies = [
  "clap",
  "ct-codecs",
  "dotenvy",
+ "getrandom 0.4.2",
  "p256 0.14.0",
  "rand",
  "serde",

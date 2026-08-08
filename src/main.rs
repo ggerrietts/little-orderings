@@ -44,6 +44,17 @@ enum Command {
         #[command(subcommand)]
         action: UserAction,
     },
+    /// Manage VAPID keys for web push
+    Vapid {
+        #[command(subcommand)]
+        action: VapidAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum VapidAction {
+    /// Generate a new VAPID keypair
+    Generate,
 }
 
 #[derive(Subcommand)]
@@ -74,6 +85,7 @@ async fn main() {
     match cli.command {
         Command::Serve => serve().await,
         Command::User { action } => user_cmd(action).await,
+        Command::Vapid { action } => vapid_cmd(action).await,
     }
 }
 
@@ -196,6 +208,29 @@ async fn user_cmd(action: UserAction) {
                     std::process::exit(1);
                 }
             }
+        }
+    }
+}
+
+async fn vapid_cmd(action: VapidAction) {
+    match action {
+        VapidAction::Generate => {
+            use ct_codecs::{Base64UrlSafeNoPadding, Encoder};
+            use p256::SecretKey;
+
+            let mut private_bytes = [0u8; 32];
+            getrandom::fill(&mut private_bytes).expect("failed to read OS randomness");
+            let secret_key = SecretKey::from_slice(&private_bytes)
+                .expect("32 random bytes formed an invalid P-256 scalar (astronomically unlikely)");
+            let public_bytes = secret_key.public_key().to_sec1_bytes();
+
+            let private_b64 = Base64UrlSafeNoPadding::encode_to_string(private_bytes.as_slice())
+                .expect("base64 encoding cannot fail");
+            let public_b64 = Base64UrlSafeNoPadding::encode_to_string(public_bytes.as_ref())
+                .expect("base64 encoding cannot fail");
+
+            println!("VAPID_PUBLIC_KEY={public_b64}");
+            println!("VAPID_PRIVATE_KEY={private_b64}");
         }
     }
 }
