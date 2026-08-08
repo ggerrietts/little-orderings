@@ -356,6 +356,8 @@ pub struct UpdateTaskRequest {
     pub priority: Option<TaskPriority>,
     #[serde(default)]
     pub due_date: Patch<String>,
+    #[serde(default)]
+    pub milestone_id: Patch<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -365,8 +367,9 @@ pub struct AssignRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct ReorderTaskRequest {
-    pub milestone_id: i64,
     pub sort_order: i64,
+    #[serde(default)]
+    pub scoped: bool,
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────

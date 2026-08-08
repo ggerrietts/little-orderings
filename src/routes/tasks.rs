@@ -174,6 +174,16 @@ pub async fn update_task(
     let project_id = project_id_for_task(&state.pool, task_id).await?;
     crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
+    if let Patch::Value(milestone_id) = &payload.milestone_id {
+        let milestone_project_id =
+            project_id_for_milestone(&state.pool, *milestone_id).await?;
+        if milestone_project_id != project_id {
+            return Err(AppError::BadRequest(
+                "Milestone does not belong to this project".to_string(),
+            ));
+        }
+    }
+
     let (old_status,): (String,) = sqlx::query_as("SELECT status FROM tasks WHERE id = ?")
         .bind(task_id)
         .fetch_one(&state.pool)
@@ -199,6 +209,11 @@ pub async fn update_task(
     match &payload.due_date {
         Patch::Value(v) => { qb.push(", due_date = ").push_bind(v); }
         Patch::Null => { qb.push(", due_date = NULL"); }
+        Patch::Missing => {}
+    }
+    match &payload.milestone_id {
+        Patch::Value(v) => { qb.push(", milestone_id = ").push_bind(v); }
+        Patch::Null => { qb.push(", milestone_id = NULL"); }
         Patch::Missing => {}
     }
     qb.push(" WHERE id = ").push_bind(task_id);
@@ -296,83 +311,86 @@ pub async fn reorder_task(
     let project_id = project_id_for_task(&state.pool, task_id).await?;
     crate::auth::require_writer(&state.pool, project_id, user.id).await?;
 
-    // Capture the old milestone before we move the task.
-    let (old_milestone_id,): (i64,) =
-        sqlx::query_as("SELECT milestone_id FROM tasks WHERE id = ?")
-            .bind(task_id)
-            .fetch_one(&state.pool)
-            .await?;
-
-    let new_milestone_id = payload.milestone_id;
-
-    // Ensure the destination milestone belongs to the same project.
-    let dest_project_id =
-        project_id_for_milestone(&state.pool, new_milestone_id).await?;
-    if dest_project_id != project_id {
-        return Err(AppError::Forbidden);
-    }
-
     let mut tx = state.pool.begin().await?;
 
-    // --- Reorder the new milestone ---
-    // Fetch task IDs in the destination milestone (excluding the moved task), in current order.
-    let mut new_ids: Vec<i64> = sqlx::query_as(
-        "SELECT id FROM tasks WHERE milestone_id = ? AND id != ? ORDER BY sort_order, id",
-    )
-    .bind(new_milestone_id)
-    .bind(task_id)
-    .fetch_all(&mut *tx)
-    .await?
-    .into_iter()
-    .map(|(id,)| id)
-    .collect();
-
-    let pos = (payload.sort_order.max(0) as usize).min(new_ids.len());
-    new_ids.insert(pos, task_id);
-
-    // Move the task and assign its new sort_order.
-    sqlx::query(
-        "UPDATE tasks SET milestone_id = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?",
-    )
-    .bind(new_milestone_id)
-    .bind(pos as i64)
-    .bind(task_id)
-    .execute(&mut *tx)
-    .await?;
-
-    // Renumber every task in the new milestone. Skip the moved task itself —
-    // its sort_order was already set in the UPDATE above.
-    for (i, id) in new_ids.iter().enumerate() {
-        if *id == task_id {
-            continue;
+    // The sibling set this reorder operates on, ordered by current
+    // sort_order, INCLUDING the moved task's own row (its current
+    // sort_order is one of the "slots" we redistribute below).
+    //
+    // Flat mode (scoped=false) scopes to the whole project. Scoped mode
+    // (scoped=true) scopes to every task sharing this task's own current
+    // milestone_id (including NULL, for the "No milestone" section) —
+    // trusted because grouped-mode drags only ever happen within one
+    // milestone section's own drag-and-drop zone; a task can't be dropped
+    // into a different section's zone, since milestone reassignment only
+    // happens through the detail modal, never through this endpoint.
+    let siblings: Vec<(i64, i64)> = if payload.scoped {
+        let (milestone_id,): (Option<i64>,) =
+            sqlx::query_as("SELECT milestone_id FROM tasks WHERE id = ?")
+                .bind(task_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        match milestone_id {
+            Some(mid) => {
+                sqlx::query_as(
+                    "SELECT id, sort_order FROM tasks
+                     WHERE project_id = ? AND milestone_id = ? ORDER BY sort_order, id",
+                )
+                .bind(project_id)
+                .bind(mid)
+                .fetch_all(&mut *tx)
+                .await?
+            }
+            None => {
+                sqlx::query_as(
+                    "SELECT id, sort_order FROM tasks
+                     WHERE project_id = ? AND milestone_id IS NULL ORDER BY sort_order, id",
+                )
+                .bind(project_id)
+                .fetch_all(&mut *tx)
+                .await?
+            }
         }
+    } else {
+        sqlx::query_as(
+            "SELECT id, sort_order FROM tasks WHERE project_id = ? ORDER BY sort_order, id",
+        )
+        .bind(project_id)
+        .fetch_all(&mut *tx)
+        .await?
+    };
+
+    let slots: Vec<i64> = siblings.iter().map(|(_, so)| *so).collect();
+    let mut ids: Vec<i64> = siblings
+        .iter()
+        .map(|(id, _)| *id)
+        .filter(|id| *id != task_id)
+        .collect();
+
+    let pos = (payload.sort_order.max(0) as usize).min(ids.len());
+    ids.insert(pos, task_id);
+
+    // Reassign the SAME set of slot values to the new order — not a fresh
+    // 0..N. This is what keeps every task outside this scope completely
+    // undisturbed, both in stored value and in order relative to anything
+    // else in the project.
+    for (slot, id) in slots.iter().zip(ids.iter()) {
         sqlx::query("UPDATE tasks SET sort_order = ? WHERE id = ?")
-            .bind(i as i64)
+            .bind(slot)
             .bind(id)
             .execute(&mut *tx)
             .await?;
     }
 
-    // --- If moved between milestones, renumber the old one too ---
-    if old_milestone_id != new_milestone_id {
-        let old_ids: Vec<(i64,)> = sqlx::query_as(
-            "SELECT id FROM tasks WHERE milestone_id = ? ORDER BY sort_order, id",
-        )
-        .bind(old_milestone_id)
-        .fetch_all(&mut *tx)
-        .await?;
-
-        for (i, (id,)) in old_ids.iter().enumerate() {
-            sqlx::query("UPDATE tasks SET sort_order = ? WHERE id = ?")
-                .bind(i as i64)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-        }
-    }
-
     tx.commit().await?;
 
-    Ok(Json(get_full_task(&state.pool, task_id).await?))
+    // Return every task whose sort_order may have changed, not just the
+    // moved one, so the frontend can update them all in local state
+    // without a refetch (matches how reorder_milestone already returns
+    // every milestone in the project after a move).
+    let mut affected: Vec<TaskWithAssignees> = Vec::with_capacity(ids.len());
+    for id in &ids {
+        affected.push(get_full_task(&state.pool, *id).await?);
+    }
+    Ok(Json(affected))
 }
