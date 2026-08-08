@@ -243,6 +243,11 @@ pub struct AddMemberRequest {
     pub role: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateMemberRoleRequest {
+    pub role: String,
+}
+
 // ── Notifications ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]

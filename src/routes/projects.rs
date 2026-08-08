@@ -11,7 +11,7 @@ use crate::{
     error::AppError,
     models::{
         AddMemberRequest, CreateProjectRequest, MilestoneSummary, Patch, Project, ProjectDetail,
-        ProjectListItem, ProjectMember, UpdateProjectRequest,
+        ProjectListItem, ProjectMember, UpdateMemberRoleRequest, UpdateProjectRequest,
     },
     AppState,
 };
@@ -281,6 +281,54 @@ pub async fn remove_member(
         .await?;
         return Err(if exists.is_some() {
             AppError::Forbidden // last owner — cannot remove
+        } else {
+            AppError::NotFound
+        });
+    }
+
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn update_member_role(
+    AuthUser(user): AuthUser,
+    State(state): State<AppState>,
+    Path((project_id, member_user_id)): Path<(i64, i64)>,
+    Json(payload): Json<UpdateMemberRoleRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    crate::auth::require_owner(&state.pool, project_id, user.id).await?;
+
+    // Atomically update the role unless doing so would demote the last
+    // owner, avoiding a TOCTOU race between an "is last owner?" check and
+    // the UPDATE — mirrors remove_member's guard style exactly.
+    let result = sqlx::query(
+        "UPDATE project_members
+         SET role = ?
+         WHERE project_id = ? AND user_id = ?
+           AND (role != 'owner' OR ? = 'owner'
+                OR (SELECT COUNT(*) FROM project_members
+                    WHERE project_id = ? AND role = 'owner') > 1)",
+    )
+    .bind(&payload.role)
+    .bind(project_id)
+    .bind(member_user_id)
+    .bind(&payload.role)
+    .bind(project_id)
+    .execute(&state.pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        // Either the member doesn't exist or they're the last owner.
+        let exists: Option<(i64,)> = sqlx::query_as(
+            "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+        )
+        .bind(project_id)
+        .bind(member_user_id)
+        .fetch_optional(&state.pool)
+        .await?;
+        return Err(if exists.is_some() {
+            AppError::Forbidden // last owner — cannot demote
         } else {
             AppError::NotFound
         });

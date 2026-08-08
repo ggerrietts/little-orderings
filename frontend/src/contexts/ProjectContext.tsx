@@ -22,6 +22,9 @@ interface ProjectContextType {
   reorderTask: (id: number, fromMilestoneId: number, toMilestoneId: number, sortOrder: number) => Promise<void>
   assignUser: (taskId: number, milestoneId: number, userId: number) => Promise<void>
   unassignUser: (taskId: number, milestoneId: number, userId: number) => Promise<void>
+  addMember: (member: ProjectMember) => Promise<void>
+  removeMember: (userId: number) => Promise<void>
+  updateMemberRole: (userId: number, role: string) => Promise<void>
 }
 
 export const ProjectContext = createContext<ProjectContextType | null>(null)
@@ -148,6 +151,21 @@ export function ProjectProvider({
     }))
   }
 
+  async function addMember(member: ProjectMember) {
+    await projectsApi.addMember(projectId, member.user_id, member.role)
+    setMembers(prev => [...prev, member])
+  }
+
+  async function removeMember(userId: number) {
+    await projectsApi.removeMember(projectId, userId)
+    setMembers(prev => prev.filter(m => m.user_id !== userId))
+  }
+
+  async function updateMemberRole(userId: number, role: string) {
+    await projectsApi.updateMemberRole(projectId, userId, role)
+    setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, role } : m))
+  }
+
   return (
     <ProjectContext.Provider value={{
       project, projectId, milestones, tasks, members, loading,
@@ -155,6 +173,7 @@ export function ProjectProvider({
       addMilestone, updateMilestone, deleteMilestone, reorderMilestone,
       addTask, updateTask, deleteTask, reorderTask,
       assignUser, unassignUser,
+      addMember, removeMember, updateMemberRole,
     }}>
       {children}
     </ProjectContext.Provider>
