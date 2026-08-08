@@ -2,6 +2,7 @@ mod auth;
 mod db;
 mod error;
 mod models;
+mod notifications;
 mod routes;
 
 use axum::{
