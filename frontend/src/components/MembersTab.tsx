@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useProject } from '../contexts/ProjectContext'
-import { users as usersApi } from '../api/client'
+import { users as usersApi, ApiError } from '../api/client'
 import type { User } from '../types'
 
 const ROLES = ['owner', 'member', 'viewer'] as const
@@ -19,7 +19,9 @@ export function MembersTab() {
 
   useEffect(() => {
     if (isOwner) {
-      usersApi.list().then(setAllUsers)
+      usersApi.list()
+        .then(setAllUsers)
+        .catch(() => setError('Failed to load users'))
     }
   }, [isOwner])
 
@@ -44,7 +46,11 @@ export function MembersTab() {
     try {
       await updateMemberRole(userId, role)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to change role')
+      if (e instanceof ApiError && e.status === 403) {
+        setError("Can't demote or remove the last owner — promote another member to owner first.")
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to change role')
+      }
     }
   }
 
@@ -53,7 +59,11 @@ export function MembersTab() {
     try {
       await removeMember(userId)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove member')
+      if (e instanceof ApiError && e.status === 403) {
+        setError("Can't demote or remove the last owner — promote another member to owner first.")
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to remove member')
+      }
     }
   }
 
