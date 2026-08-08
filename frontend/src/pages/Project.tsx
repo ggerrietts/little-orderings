@@ -3,6 +3,7 @@ import { ProjectProvider, useProject } from '../contexts/ProjectContext'
 import ListView from '../components/ListView'
 import KanbanBoard from '../components/KanbanBoard'
 import { TaskDetailModal } from '../components/TaskDetailModal'
+import { InstallLink } from '../components/InstallLink'
 
 type ViewType = 'list' | 'kanban'
 
@@ -32,9 +33,12 @@ function ProjectContent() {
     <div className="min-h-screen bg-canvas">
       <div className="px-8 py-6 border-b border-border">
         <div className="max-w-6xl mx-auto">
-          <Link to="/" className="text-sm text-muted hover:text-accent-muted transition-colors inline-block mb-3">
-            ← All Projects
-          </Link>
+          <div className="flex items-center justify-between mb-3">
+            <Link to="/" className="text-sm text-muted hover:text-accent-muted transition-colors inline-block">
+              ← All Projects
+            </Link>
+            <InstallLink />
+          </div>
           <h1 className="text-2xl font-semibold text-text mb-1">{project?.name}</h1>
           {project?.description != null && (
             <p className="text-muted text-sm mb-3">{project.description}</p>

@@ -5,6 +5,7 @@ import { projects as projectsApi, auth } from '../api/client'
 import type { CreateProjectInput } from '../api/client'
 import { useAuth } from '../contexts/AuthContext'
 import type { ProjectListItem } from '../types'
+import { InstallLink } from '../components/InstallLink'
 
 export default function Dashboard() {
   const [items, setItems] = useState<ProjectListItem[]>([])
@@ -55,12 +56,15 @@ export default function Dashboard() {
     <div className="min-h-screen bg-canvas">
       <div className="flex items-center justify-between px-8 py-4 border-b border-border bg-surface shadow-sm">
         <span className="font-semibold text-lg text-text">Little Orderings</span>
-        <button
-          onClick={handleLogout}
-          className="text-muted hover:text-text text-sm transition-colors"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-4">
+          <InstallLink />
+          <button
+            onClick={handleLogout}
+            className="text-muted hover:text-text text-sm transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
 
       <div className="px-8 py-6">
