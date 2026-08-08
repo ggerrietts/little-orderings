@@ -16,13 +16,10 @@ pub async fn project_id_for_task(
     pool: &sqlx::SqlitePool,
     task_id: i64,
 ) -> Result<i64, AppError> {
-    let row: Option<(i64,)> = sqlx::query_as(
-        "SELECT m.project_id FROM tasks t
-         JOIN milestones m ON m.id = t.milestone_id
-         WHERE t.id = ?",
-    )
-    .bind(task_id)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<(i64,)> =
+        sqlx::query_as("SELECT project_id FROM tasks WHERE id = ?")
+            .bind(task_id)
+            .fetch_optional(pool)
+            .await?;
     row.map(|(id,)| id).ok_or(AppError::NotFound)
 }

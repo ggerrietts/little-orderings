@@ -26,7 +26,7 @@ async fn get_full_task(
     task_id: i64,
 ) -> Result<TaskWithAssignees, AppError> {
     let task: Task = sqlx::query_as(
-        "SELECT id, milestone_id, title, description, status, priority,
+        "SELECT id, project_id, milestone_id, title, description, status, priority,
                 due_date, sort_order, created_by, created_at, updated_at
          FROM tasks WHERE id = ?",
     )
@@ -52,18 +52,16 @@ async fn get_full_task(
 pub async fn list_tasks(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
-    Path(milestone_id): Path<i64>,
+    Path(project_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
-    let project_id =
-        project_id_for_milestone(&state.pool, milestone_id).await?;
     crate::auth::require_member(&state.pool, project_id, user.id).await?;
 
     let tasks: Vec<Task> = sqlx::query_as(
-        "SELECT id, milestone_id, title, description, status, priority,
+        "SELECT id, project_id, milestone_id, title, description, status, priority,
                 due_date, sort_order, created_by, created_at, updated_at
-         FROM tasks WHERE milestone_id = ? ORDER BY sort_order, id",
+         FROM tasks WHERE project_id = ? ORDER BY sort_order, id",
     )
-    .bind(milestone_id)
+    .bind(project_id)
     .fetch_all(&state.pool)
     .await?;
 
@@ -110,29 +108,39 @@ pub async fn list_tasks(
 pub async fn create_task(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
-    Path(milestone_id): Path<i64>,
+    Path(project_id): Path<i64>,
     Json(payload): Json<CreateTaskRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let project_id =
-        project_id_for_milestone(&state.pool, milestone_id).await?;
     crate::auth::require_writer(&state.pool, project_id, user.id).await?;
+
+    // If a milestone was specified, it must belong to this project.
+    if let Some(milestone_id) = payload.milestone_id {
+        let milestone_project_id =
+            project_id_for_milestone(&state.pool, milestone_id).await?;
+        if milestone_project_id != project_id {
+            return Err(AppError::BadRequest(
+                "Milestone does not belong to this project".to_string(),
+            ));
+        }
+    }
 
     let priority = payload.priority.as_ref().map(|p| p.as_str()).unwrap_or("normal");
 
     let mut tx = state.pool.begin().await?;
 
     let (next_order,): (i64,) = sqlx::query_as(
-        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tasks WHERE milestone_id = ?",
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tasks WHERE project_id = ?",
     )
-    .bind(milestone_id)
+    .bind(project_id)
     .fetch_one(&mut *tx)
     .await?;
 
     let result = sqlx::query(
-        "INSERT INTO tasks (milestone_id, title, description, priority, due_date, sort_order, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tasks (project_id, milestone_id, title, description, priority, due_date, sort_order, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(milestone_id)
+    .bind(project_id)
+    .bind(payload.milestone_id)
     .bind(&payload.title)
     .bind(&payload.description)
     .bind(priority)

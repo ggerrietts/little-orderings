@@ -4,4 +4,4 @@ import type { Assignee } from "./Assignee";
 /**
  * Full task returned from all task endpoints — task fields + embedded assignees.
  */
-export type TaskWithAssignees = { assignees: Array<Assignee>, id: number, milestone_id: number, title: string, description: string | null, status: string, priority: string, due_date: string | null, sort_order: number, created_by: number, created_at: string | null, updated_at: string | null, };
+export type TaskWithAssignees = { assignees: Array<Assignee>, id: number, project_id: number, milestone_id: number | null, title: string, description: string | null, status: string, priority: string, due_date: string | null, sort_order: number, created_by: number, created_at: string | null, updated_at: string | null, };
