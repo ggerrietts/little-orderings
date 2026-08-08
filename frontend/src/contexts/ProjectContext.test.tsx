@@ -42,7 +42,7 @@ function TestConsumer() {
     <div>
       <div data-testid="project-name">{ctx.project?.name}</div>
       <div data-testid="milestone-count">{ctx.milestones.length}</div>
-      <div data-testid="task-count">{ctx.tasks[10]?.length ?? 0}</div>
+      <div data-testid="task-count">{ctx.tasks.filter(t => t.milestone_id === 10).length}</div>
     </div>
   )
 }
@@ -70,20 +70,20 @@ test('addTask appends to the correct milestone bucket', async () => {
   const newTask: TaskWithAssignees = { ...task, id: 101, title: 'New' }
   mockTasks.create.mockResolvedValue(newTask)
 
-  let addTaskFn: ((milestoneId: number, input: client.CreateTaskInput) => Promise<void>) | undefined
+  let addTaskFn: ((input: client.CreateTaskInput) => Promise<void>) | undefined
 
   function Grabber() {
     const ctx = useProject()
     addTaskFn = ctx.addTask
     if (ctx.loading) return <div>loading</div>
-    return <div data-testid="count">{ctx.tasks[10]?.length ?? 0}</div>
+    return <div data-testid="count">{ctx.tasks.filter(t => t.milestone_id === 10).length}</div>
   }
 
   render(<ProjectProvider projectId={1}><Grabber /></ProjectProvider>)
   await waitFor(() => screen.getByTestId('count'))
 
   await act(async () => {
-    await addTaskFn!(10, { title: 'New' })
+    await addTaskFn!({ title: 'New', milestone_id: 10 })
   })
 
   expect(screen.getByTestId('count')).toHaveTextContent('2')

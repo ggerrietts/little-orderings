@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent } from '@dnd-kit/core'
 import {
@@ -24,10 +25,14 @@ const PRIORITY_LABEL: Record<string, string> = {
   urgent: 'Urgent priority',
 }
 
+type GroupBy = 'milestone' | 'none'
+
 export default function ListView() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const groupBy = (searchParams.get('group') ?? 'milestone') as GroupBy
   const { milestones, tasks, addMilestone, updateMilestone, reorderMilestone } = useProject()
   const sensors = useSensors(useSensor(PointerSensor))
-  const sorted = [...milestones].sort((a, b) => a.sort_order - b.sort_order)
+  const sortedMilestones = [...milestones].sort((a, b) => a.sort_order - b.sort_order)
 
   async function handleMilestoneDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -36,31 +41,68 @@ export default function ListView() {
     if (overMs) await reorderMilestone(Number(active.id), overMs.sort_order)
   }
 
+  function setGroupBy(g: GroupBy) {
+    const next = new URLSearchParams(searchParams)
+    next.set('group', g)
+    setSearchParams(next)
+  }
+
   return (
     <div className="space-y-6">
-      <DndContext sensors={sensors} onDragEnd={handleMilestoneDragEnd}>
-        <SortableContext
-          items={sorted.map(m => m.id)}
-          strategy={verticalListSortingStrategy}
+      <div role="tablist" className="flex gap-1">
+        <button
+          role="tab"
+          aria-selected={groupBy === 'milestone'}
+          onClick={() => setGroupBy('milestone')}
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+            groupBy === 'milestone' ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text'
+          }`}
         >
-          {sorted.map(m => (
-            <MilestoneSection
-              key={m.id}
-              milestone={m}
-              tasks={tasks[m.id] ?? []}
-              onRename={name => updateMilestone(m.id, { name })}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
+          Grouped by milestone
+        </button>
+        <button
+          role="tab"
+          aria-selected={groupBy === 'none'}
+          onClick={() => setGroupBy('none')}
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+            groupBy === 'none' ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text'
+          }`}
+        >
+          Flat
+        </button>
+      </div>
 
-      {sorted.length === 0 && (
-        <p className="text-muted text-center py-16">
-          No milestones yet. Add your first milestone below.
-        </p>
+      {groupBy === 'milestone' ? (
+        <>
+          <DndContext sensors={sensors} onDragEnd={handleMilestoneDragEnd}>
+            <SortableContext
+              items={sortedMilestones.map(m => m.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {sortedMilestones.map(m => (
+                <MilestoneSection
+                  key={m.id}
+                  milestone={m}
+                  tasks={tasks.filter(t => t.milestone_id === m.id)}
+                  onRename={name => updateMilestone(m.id, { name })}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+
+          {sortedMilestones.length === 0 && (
+            <p className="text-muted text-center py-16">
+              No milestones yet. Add your first milestone below.
+            </p>
+          )}
+
+          <AddMilestoneButton onAdd={name => addMilestone({ name })} />
+
+          <NoMilestoneSection tasks={tasks.filter(t => t.milestone_id == null)} />
+        </>
+      ) : (
+        <FlatTaskList tasks={tasks} />
       )}
-
-      <AddMilestoneButton onAdd={name => addMilestone({ name })} />
     </div>
   )
 }
@@ -117,7 +159,7 @@ function MilestoneSection({
 
       {!collapsed && (
         <>
-          <TaskList milestoneId={milestone.id} tasks={tasks} />
+          <TaskList tasks={tasks} scoped />
           <AddTaskRow milestoneId={milestone.id} />
         </>
       )}
@@ -125,14 +167,50 @@ function MilestoneSection({
   )
 }
 
+function NoMilestoneSection({ tasks }: { tasks: TaskWithAssignees[] }) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <div className="bg-surface border border-border shadow-sm rounded-xl">
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className="text-muted hover:text-text"
+        >
+          {collapsed ? '▶' : '▼'}
+        </button>
+        <h3 className="font-semibold text-text flex-1">No milestone</h3>
+        <span className="text-xs text-muted">{tasks.length} tasks</span>
+      </div>
+
+      {!collapsed && (
+        <>
+          <TaskList tasks={tasks} scoped />
+          <AddTaskRow milestoneId={null} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function FlatTaskList({ tasks }: { tasks: TaskWithAssignees[] }) {
+  return (
+    <div className="bg-surface border border-border shadow-sm rounded-xl">
+      <TaskList tasks={tasks} scoped={false} showMilestoneChip />
+      <AddTaskRow milestoneId={null} />
+    </div>
+  )
+}
+
 function TaskList({
-  milestoneId,
   tasks,
+  scoped,
+  showMilestoneChip = false,
 }: {
-  milestoneId: number
   tasks: TaskWithAssignees[]
+  scoped: boolean
+  showMilestoneChip?: boolean
 }) {
-  const { setSelectedTaskId, updateTask, reorderTask } = useProject()
+  const { setSelectedTaskId, updateTask, reorderTask, milestones } = useProject()
   const sensors = useSensors(useSensor(PointerSensor))
   const sorted = [...tasks].sort((a, b) => a.sort_order - b.sort_order)
   const today = startOfToday()
@@ -140,8 +218,13 @@ function TaskList({
   async function handleTaskDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    const overTask = tasks.find(t => t.id === Number(over.id))
-    if (overTask) await reorderTask(Number(active.id), milestoneId, milestoneId, overTask.sort_order)
+    const overIndex = sorted.findIndex(t => t.id === Number(over.id))
+    if (overIndex === -1) return
+    await reorderTask(Number(active.id), overIndex, scoped)
+  }
+
+  function milestoneFor(task: TaskWithAssignees) {
+    return task.milestone_id != null ? milestones.find(m => m.id === task.milestone_id) : undefined
   }
 
   return (
@@ -158,9 +241,10 @@ function TaskList({
               key={task.id}
               task={task}
               overdue={overdue}
+              milestone={showMilestoneChip ? milestoneFor(task) : undefined}
               onClickTitle={() => setSelectedTaskId(task.id)}
               onToggleDone={() =>
-                updateTask(task.id, milestoneId, {
+                updateTask(task.id, {
                   status: task.status === 'done' ? 'todo' : 'done',
                 })
               }
@@ -175,11 +259,13 @@ function TaskList({
 function SortableTaskRow({
   task,
   overdue,
+  milestone,
   onClickTitle,
   onToggleDone,
 }: {
   task: TaskWithAssignees
   overdue: boolean
+  milestone?: MilestoneSummary
   onClickTitle: () => void
   onToggleDone: () => void
 }) {
@@ -216,6 +302,11 @@ function SortableTaskRow({
       >
         {task.title}
       </button>
+      {milestone && (
+        <span className="text-xs bg-accent-subtle text-accent-muted px-1.5 py-0.5 rounded">
+          {milestone.name}
+        </span>
+      )}
       <span
         title={PRIORITY_LABEL[task.priority] ?? 'Unknown priority'}
         className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-priority-low'}`}
@@ -245,7 +336,7 @@ function SortableTaskRow({
   )
 }
 
-function AddTaskRow({ milestoneId }: { milestoneId: number }) {
+function AddTaskRow({ milestoneId }: { milestoneId: number | null }) {
   const [value, setValue] = useState('')
   const { addTask } = useProject()
 
@@ -253,7 +344,7 @@ function AddTaskRow({ milestoneId }: { milestoneId: number }) {
     e.preventDefault()
     const trimmed = value.trim()
     if (!trimmed) return
-    await addTask(milestoneId, { title: trimmed })
+    await addTask(milestoneId != null ? { title: trimmed, milestone_id: milestoneId } : { title: trimmed })
     setValue('')
   }
 
