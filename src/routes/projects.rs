@@ -25,8 +25,7 @@ pub async fn list_projects(
                 p.created_at, p.updated_at,
                 (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) as member_count,
                 (SELECT COUNT(*) FROM tasks t
-                 JOIN milestones m ON t.milestone_id = m.id
-                 WHERE m.project_id = p.id
+                 WHERE t.project_id = p.id
                    AND t.status NOT IN ('done', 'cancelled')) as open_task_count
          FROM projects p
          JOIN project_members pm ON pm.project_id = p.id
