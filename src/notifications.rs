@@ -30,7 +30,19 @@ struct Subscription {
 /// Must be called only after the triggering mutation's transaction commits —
 /// a slow or failed push send must never roll back the actual data change.
 /// Failures are logged and swallowed; there is no retry queue (spec §8).
+///
+/// Runs on a spawned task so the caller's response is never blocked on push
+/// delivery: `IsahcWebPushClient` is built fresh per call with no configured
+/// timeout, so a single unresponsive push endpoint must not stall the
+/// user-facing request that triggered this notification.
 pub async fn notify_watchers(pool: &SqlitePool, project_id: i64, event_tier: Tier, actor_id: i64) {
+    let pool = pool.clone();
+    tokio::spawn(async move {
+        notify_watchers_inner(&pool, project_id, event_tier, actor_id).await;
+    });
+}
+
+async fn notify_watchers_inner(pool: &SqlitePool, project_id: i64, event_tier: Tier, actor_id: i64) {
     let project_name: Option<(String,)> = match sqlx::query_as(
         "SELECT name FROM projects WHERE id = ?",
     )
