@@ -111,7 +111,13 @@ async fn serve() {
                 .parse::<HeaderValue>()
                 .expect("Invalid ALLOWED_ORIGIN"),
         )
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::PUT,
+            Method::DELETE,
+        ])
         .allow_headers([header::CONTENT_TYPE, header::COOKIE])
         .allow_credentials(true);
 
