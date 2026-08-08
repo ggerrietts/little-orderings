@@ -1,7 +1,12 @@
 self.addEventListener('push', (event) => {
-  const data = event.data
-    ? event.data.json()
-    : { title: 'Little Orderings', body: 'You have updates', url: '/' }
+  let data = { title: 'Little Orderings', body: 'You have updates', url: '/' }
+  if (event.data) {
+    try {
+      data = event.data.json()
+    } catch {
+      // fall back to the default above
+    }
+  }
 
   event.waitUntil(
     self.registration.showNotification(data.title, {
