@@ -2,6 +2,14 @@
 -- rather than a required container. sort_order changes from per-milestone
 -- to project-wide.
 
+-- Drop the existing tasks_updated_at trigger (from migration 002) before
+-- the backfill below — otherwise the backfill's UPDATE would fire it and
+-- stamp every task's updated_at with the migration's run time, well before
+-- the table rebuild further down even happens. Recreated at the end of
+-- this migration, after the sort_order renumber, so it only starts firing
+-- on real future edits again.
+DROP TRIGGER tasks_updated_at;
+
 -- Add project_id nullable first (SQLite can't add a NOT NULL column
 -- without a static default; this needs a computed backfill instead).
 ALTER TABLE tasks ADD COLUMN project_id INTEGER REFERENCES projects(id);
@@ -70,19 +78,14 @@ DROP TABLE tasks;
 ALTER TABLE tasks_new RENAME TO tasks;
 ALTER TABLE task_assignments_new RENAME TO task_assignments;
 
--- Rebuilding both tables drops their indexes and triggers along with
--- them — recreate all of them (idx_tasks_milestone and
--- idx_task_assignments_user from migration 001, tasks_updated_at from
--- migration 002).
+-- Rebuilding both tables drops their indexes along with them — recreate
+-- them now (idx_tasks_milestone and idx_task_assignments_user from
+-- migration 001). tasks_updated_at (migration 002, dropped above) is
+-- recreated further down, after the sort_order renumber, so neither that
+-- UPDATE nor anything before it stamps updated_at on every task.
 CREATE INDEX idx_tasks_milestone ON tasks(milestone_id);
 CREATE INDEX idx_tasks_project ON tasks(project_id);
 CREATE INDEX idx_task_assignments_user ON task_assignments(user_id);
-
-CREATE TRIGGER tasks_updated_at
-AFTER UPDATE ON tasks
-BEGIN
-    UPDATE tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
 
 -- Renumber sort_order project-wide. Every task at this point still has a
 -- milestone (this migration runs before any task can exist without one),
@@ -101,3 +104,11 @@ WITH ranked AS (
 UPDATE tasks
 SET sort_order = (SELECT new_order FROM ranked WHERE ranked.id = tasks.id)
 WHERE id IN (SELECT id FROM ranked);
+
+-- tasks_updated_at from migration 002, recreated last so it doesn't fire
+-- during the renumber above.
+CREATE TRIGGER tasks_updated_at
+AFTER UPDATE ON tasks
+BEGIN
+    UPDATE tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
