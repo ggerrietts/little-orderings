@@ -180,7 +180,7 @@ pub struct ProjectListItem {
     pub open_task_count: i64,
 }
 
-/// Detail view: project + its milestones.
+/// Detail view: project + its milestones + the caller's own watch state.
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -188,6 +188,7 @@ pub struct ProjectDetail {
     #[serde(flatten)]
     pub project: Project,
     pub milestones: Vec<MilestoneSummary>,
+    pub my_watch_tier: Option<String>,
 }
 
 /// Milestone row returned inside a project detail response.

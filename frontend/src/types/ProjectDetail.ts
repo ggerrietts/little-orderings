@@ -2,6 +2,6 @@
 import type { MilestoneSummary } from "./MilestoneSummary";
 
 /**
- * Detail view: project + its milestones.
+ * Detail view: project + its milestones + the caller's own watch state.
  */
-export type ProjectDetail = { milestones: Array<MilestoneSummary>, id: number, name: string, description: string | null, status: string, target_date: string | null, created_at: string | null, updated_at: string | null, };
+export type ProjectDetail = { milestones: Array<MilestoneSummary>, my_watch_tier: string | null, id: number, name: string, description: string | null, status: string, target_date: string | null, created_at: string | null, updated_at: string | null, };
