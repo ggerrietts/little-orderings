@@ -206,6 +206,14 @@ standalone files are easier to reason about):
 (server-only, holds real secrets) — it just warns if `.env` doesn't exist yet so you
 remember to create it from the freshly-synced `.env.example`.
 
+**Getting real secret values onto the server:** `deploy/admin.sh push-env` (added by
+the push-notifications work) is a separate command from `sync` — it `scp`s the
+local, gitignored `deploy/prod.env` to the server as `.env`. Kept deliberately
+separate from `sync` since overwriting live secrets is a bigger deal than overwriting
+the compose file/`Caddyfile`, and the two files have different lifecycles (`prod.env`
+never lived in the repo at all; the synced files did). See §9 for what belongs in
+`deploy/prod.env`.
+
 Run production with `docker compose -f docker-compose.prod.yml pull && docker compose
 -f docker-compose.prod.yml up -d` — deliberately two steps, not `up -d --build` (which
 wouldn't build anything here anyway, but `pull` first makes the deploy's intent
@@ -261,6 +269,31 @@ in a commit) and `DATA_ROOT` (not sensitive, just kept here so it's one source o
 truth with the provisioning script — see §6). No admin credentials go in `.env` —
 the first account is created after the stack is up, by running
 `deploy/admin.sh add-user <username> <email> <password>` once (see §6).
+
+**`VAPID_PRIVATE_KEY` — the one deliberate exception to "generate on the server."**
+Push notifications need a VAPID keypair. Unlike every other secret in this section,
+it must be **generated locally**, not on the box, because its public half has to be
+compiled into the frontend bundle at *build time* — and the build happens on GitHub's
+runners (§5), never on the server. Concretely:
+
+1. Locally: `cargo run -- vapid generate`, which prints both halves.
+2. Commit the printed `VAPID_PUBLIC_KEY` value into `frontend/src/config.ts`,
+   replacing the placeholder. This is **not secret** — it's sent in the clear on
+   every browser `pushManager.subscribe()` call anyway, so committing it is safe and
+   required (the frontend can't read it from an env var; it's baked into the static
+   bundle at build time). Push to `main` and wait for the GitHub Actions image
+   rebuild (§5) — `deploy/admin.sh restart` only pulls whatever image already exists,
+   it does not rebuild, so the new public key isn't live until the rebuilt image is
+   pulled.
+3. Put both lines in the local, gitignored `deploy/prod.env` (`VAPID_PUBLIC_KEY` for
+   reference, `VAPID_PRIVATE_KEY` is the one that matters here) and push it to the
+   server's `.env` with `deploy/admin.sh push-env` (see §6). The private half is the
+   only one that needs to exist on the server — it's read at runtime by
+   `notify_watchers` to sign outgoing pushes, never sent to a browser.
+
+Everything else in `.env`/`deploy/prod.env` keeps following "generate on the server,
+not locally" — this is specifically about the half of a keypair that has a
+build-time frontend dependency, not a general exception.
 
 **No GHCR pull token.** Removed 2026-08-06 along with the repo going public — the
 image is now anonymously pullable, so there's nothing to authenticate on this box at
@@ -340,11 +373,20 @@ Struck-through items are done; the rest is what's actually left.
     `Caddyfile`, and `.env.example` to `~/little-orderings` on the server.
 15. Create the real `.env` there from the synced `.env.example`
     (`SESSION_SECRET` via `openssl rand -base64 32`, confirm `DATA_ROOT`), `chmod 600`.
-16. Deploy with ACME staging first if there's any doubt DNS is live (§7):
+16. **First deploy of push notifications only:** generate and wire up a real VAPID
+    keypair (§9) — `cargo run -- vapid generate`; commit `VAPID_PUBLIC_KEY` into
+    `frontend/src/config.ts` (replacing the placeholder) and push to `main`; wait for
+    the GitHub Actions build-and-push workflow to finish so the image actually
+    contains the new key (`gh run list --workflow=build-and-push.yml` or the Actions
+    tab — the same check used to confirm the original image build in §11 item 10);
+    put both lines in `deploy/prod.env`; run `deploy/admin.sh push-env` to land
+    `VAPID_PRIVATE_KEY` in the server's `.env`. Skippable on later redeploys once a
+    real key already exists in both places.
+17. Deploy with ACME staging first if there's any doubt DNS is live (§7):
     `deploy/admin.sh restart` (pull + up -d), verify, switch to production CA.
-17. `deploy/admin.sh add-user <username> <email> <password>` — create the first
+18. `deploy/admin.sh add-user <username> <email> <password>` — create the first
     account. No more automatic bootstrap from `ADMIN_*` env vars (§6/§9).
-18. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
+19. Backups (§10) — still just documented, not automated. Log rotation is done (§6).
 
 ## Open decisions
 
