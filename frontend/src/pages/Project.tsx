@@ -6,12 +6,14 @@ import KanbanBoard from '../components/KanbanBoard'
 import { TaskDetailModal } from '../components/TaskDetailModal'
 import { InstallLink } from '../components/InstallLink'
 import { WatchToggle } from '../components/WatchToggle'
+import { MembersTab } from '../components/MembersTab'
 
-type ViewType = 'list' | 'kanban'
+type ViewType = 'list' | 'kanban' | 'members'
 
 const VIEWS: { id: ViewType; label: string }[] = [
   { id: 'list', label: 'List' },
   { id: 'kanban', label: 'Kanban' },
+  { id: 'members', label: 'Members' },
 ]
 
 function ProjectContent() {
@@ -75,7 +77,7 @@ function ProjectContent() {
 
       <div className="px-8 py-4">
         <div className="max-w-6xl mx-auto">
-          {view === 'list' ? <ListView /> : <KanbanBoard />}
+          {view === 'list' ? <ListView /> : view === 'kanban' ? <KanbanBoard /> : <MembersTab />}
         </div>
       </div>
 
