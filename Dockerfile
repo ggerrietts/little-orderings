@@ -27,7 +27,7 @@ RUN cargo build --release
 
 # Stage 3: Minimal runtime image
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y libsqlite3-0 ca-certificates curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libsqlite3-0 ca-certificates curl libssl3 && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 10001 app && useradd -u 10001 -g app -M -s /usr/sbin/nologin app
 WORKDIR /app
 
