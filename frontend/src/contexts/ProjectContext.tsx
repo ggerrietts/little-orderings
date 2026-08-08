@@ -5,6 +5,7 @@ import type { ProjectDetail, MilestoneSummary, TaskWithAssignees, ProjectMember 
 
 interface ProjectContextType {
   project: ProjectDetail | null
+  projectId: number
   milestones: MilestoneSummary[]
   tasks: Record<number, TaskWithAssignees[]>
   members: ProjectMember[]
@@ -149,7 +150,7 @@ export function ProjectProvider({
 
   return (
     <ProjectContext.Provider value={{
-      project, milestones, tasks, members, loading,
+      project, projectId, milestones, tasks, members, loading,
       selectedTaskId, setSelectedTaskId,
       addMilestone, updateMilestone, deleteMilestone, reorderMilestone,
       addTask, updateTask, deleteTask, reorderTask,

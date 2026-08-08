@@ -13,6 +13,7 @@ vi.mock('../api/client', async (importOriginal) => {
     projects: { get: vi.fn(), listMembers: vi.fn() },
     tasks: { list: vi.fn() },
     milestones: {},
+    watches: { set: vi.fn(), remove: vi.fn() },
   }
 })
 
@@ -22,6 +23,7 @@ const mockTasks = client.tasks as Record<string, ReturnType<typeof vi.fn>>
 const fakeProject: ProjectDetail = {
   id: 1, name: 'Alpha', description: null, status: 'active',
   target_date: null, created_at: null, updated_at: null, milestones: [],
+  my_watch_tier: null,
 }
 const fakeMembers: ProjectMember[] = []
 
