@@ -169,7 +169,7 @@ pub async fn update_project(
     .fetch_one(&state.pool)
     .await?;
 
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(Json(project))
 }
@@ -188,7 +188,7 @@ pub async fn archive_project(
     .execute(&state.pool)
     .await?;
 
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -243,7 +243,7 @@ pub async fn add_member(
         }
     })?;
 
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::CREATED)
 }
@@ -286,7 +286,7 @@ pub async fn remove_member(
         });
     }
 
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::NO_CONTENT)
 }

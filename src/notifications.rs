@@ -24,12 +24,13 @@ struct Subscription {
     auth_key: String,
 }
 
-/// Notifies every eligible watcher of `project_id` that the project changed.
+/// Notifies every eligible watcher of `project_id` (other than `actor_id`,
+/// the user who made the change) that the project changed.
 ///
 /// Must be called only after the triggering mutation's transaction commits —
 /// a slow or failed push send must never roll back the actual data change.
 /// Failures are logged and swallowed; there is no retry queue (spec §8).
-pub async fn notify_watchers(pool: &SqlitePool, project_id: i64, event_tier: Tier) {
+pub async fn notify_watchers(pool: &SqlitePool, project_id: i64, event_tier: Tier, actor_id: i64) {
     let project_name: Option<(String,)> = match sqlx::query_as(
         "SELECT name FROM projects WHERE id = ?",
     )
@@ -62,6 +63,12 @@ pub async fn notify_watchers(pool: &SqlitePool, project_id: i64, event_tier: Tie
     };
 
     for watcher in watchers {
+        if watcher.user_id == actor_id {
+            // The user who made the change doesn't need to be told about it —
+            // and notifying them would consume their debounce slot, deafening
+            // them to the next real change from someone else.
+            continue;
+        }
         let Some(tier) = Tier::from_str_opt(&watcher.tier) else {
             continue;
         };

@@ -149,6 +149,7 @@ pub async fn create_task(
         &state.pool,
         project_id,
         crate::models::Tier::TaskMilestones,
+        user.id,
     )
     .await;
 
@@ -202,7 +203,7 @@ pub async fn update_task(
     } else {
         crate::models::Tier::All
     };
-    crate::notifications::notify_watchers(&state.pool, project_id, event_tier).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, event_tier, user.id).await;
 
     Ok(Json(get_full_task(&state.pool, task_id).await?))
 }
@@ -220,7 +221,7 @@ pub async fn delete_task(
         .execute(&state.pool)
         .await?;
 
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -252,7 +253,7 @@ pub async fn assign_user(
             }
         })?;
 
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok((StatusCode::CREATED, Json(get_full_task(&state.pool, task_id).await?)))
 }
@@ -273,7 +274,7 @@ pub async fn unassign_user(
         .execute(&state.pool)
         .await?;
 
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
