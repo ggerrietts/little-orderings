@@ -4,3 +4,4 @@ bindings/
 .env
 .claude/
 .idea/
+.superpowers/
