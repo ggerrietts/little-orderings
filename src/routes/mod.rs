@@ -43,7 +43,7 @@ pub fn api_router() -> Router<AppState> {
         )
         .route(
             "/projects/:id/members/:user_id",
-            delete(projects::remove_member),
+            patch(projects::update_member_role).delete(projects::remove_member),
         )
         .route(
             "/projects/:id/watch",
