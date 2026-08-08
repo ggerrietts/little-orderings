@@ -79,14 +79,20 @@ export function MembersTab() {
             </div>
             {isOwner ? (
               <div className="flex items-center gap-2">
-                <select
-                  aria-label={`Role for ${m.username}`}
-                  value={m.role}
-                  onChange={e => handleRoleChange(m.user_id, e.target.value)}
-                  className="bg-canvas text-text text-sm rounded-lg px-2 py-1 border border-border focus:outline-none focus:border-accent"
-                >
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+                {m.user_id !== currentUser?.id ? (
+                  <select
+                    aria-label={`Role for ${m.username}`}
+                    value={m.role}
+                    onChange={e => handleRoleChange(m.user_id, e.target.value)}
+                    className="bg-canvas text-text text-sm rounded-lg px-2 py-1 border border-border focus:outline-none focus:border-accent"
+                  >
+                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-canvas border border-border text-muted text-xs font-medium">
+                    {m.role}
+                  </span>
+                )}
                 <button
                   aria-label={`Remove ${m.username}`}
                   onClick={() => handleRemove(m.user_id)}

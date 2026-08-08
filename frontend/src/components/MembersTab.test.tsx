@@ -92,6 +92,25 @@ test('owner can add a non-member user', async () => {
   expect(addMember).toHaveBeenCalledWith({ user_id: 3, username: 'carol', email: 'carol@example.com', role: 'member' })
 })
 
+test('owner viewing their own row sees a role badge, not a select, but can still remove themselves', async () => {
+  mockUseAuth.mockReturnValue({ user: ownerUser } as unknown as ReturnType<typeof authContext.useAuth>)
+  mockProject([owner, memberRow])
+
+  render(<MembersTab />)
+
+  await screen.findByText('alice')
+  expect(screen.queryByRole('combobox', { name: 'Role for alice' })).not.toBeInTheDocument()
+  expect(screen.getByRole('combobox', { name: 'Role for bob' })).toBeInTheDocument()
+
+  const removeOwnRow = screen.getByRole('button', { name: 'Remove alice' })
+  expect(removeOwnRow).toBeInTheDocument()
+
+  const user = userEvent.setup()
+  await user.click(removeOwnRow)
+
+  expect(removeMember).toHaveBeenCalledWith(1)
+})
+
 test('add section is hidden once every user is already a member', async () => {
   mockUseAuth.mockReturnValue({ user: ownerUser } as unknown as ReturnType<typeof authContext.useAuth>)
   mockUsersList.mockResolvedValue([])
