@@ -145,6 +145,13 @@ pub async fn create_task(
     let task_id = result.last_insert_rowid();
     tx.commit().await?;
 
+    crate::notifications::notify_watchers(
+        &state.pool,
+        project_id,
+        crate::models::Tier::TaskMilestones,
+    )
+    .await;
+
     let task = get_full_task(&state.pool, task_id).await?;
     Ok((StatusCode::CREATED, Json(task)))
 }
@@ -157,6 +164,11 @@ pub async fn update_task(
 ) -> Result<impl IntoResponse, AppError> {
     let project_id = project_id_for_task(&state.pool, task_id).await?;
     crate::auth::require_writer(&state.pool, project_id, user.id).await?;
+
+    let (old_status,): (String,) = sqlx::query_as("SELECT status FROM tasks WHERE id = ?")
+        .bind(task_id)
+        .fetch_one(&state.pool)
+        .await?;
 
     let mut qb = QueryBuilder::<sqlx::Sqlite>::new(
         "UPDATE tasks SET updated_at = CURRENT_TIMESTAMP",
@@ -183,6 +195,15 @@ pub async fn update_task(
     qb.push(" WHERE id = ").push_bind(task_id);
     qb.build().execute(&state.pool).await?;
 
+    let became_done = old_status != "done"
+        && matches!(payload.status, Some(crate::models::TaskStatus::Done));
+    let event_tier = if became_done {
+        crate::models::Tier::TaskMilestones
+    } else {
+        crate::models::Tier::All
+    };
+    crate::notifications::notify_watchers(&state.pool, project_id, event_tier).await;
+
     Ok(Json(get_full_task(&state.pool, task_id).await?))
 }
 
@@ -198,6 +219,8 @@ pub async fn delete_task(
         .bind(task_id)
         .execute(&state.pool)
         .await?;
+
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -229,6 +252,8 @@ pub async fn assign_user(
             }
         })?;
 
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
+
     Ok((StatusCode::CREATED, Json(get_full_task(&state.pool, task_id).await?)))
 }
 
@@ -247,6 +272,8 @@ pub async fn unassign_user(
         .bind(target_user_id)
         .execute(&state.pool)
         .await?;
+
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
