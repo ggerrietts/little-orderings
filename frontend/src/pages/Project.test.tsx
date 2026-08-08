@@ -82,3 +82,13 @@ test('switching to members tab sets aria-selected', async () => {
   expect(screen.getByRole('tab', { name: /members/i })).toHaveAttribute('aria-selected', 'true')
   expect(screen.getByRole('tab', { name: /list/i })).toHaveAttribute('aria-selected', 'false')
 })
+
+test('switching view tabs preserves the list view\'s group param', async () => {
+  const user = userEvent.setup()
+  renderProject('?view=list&group=none')
+  await waitFor(() => screen.getByText('Alpha'))
+  expect(screen.getByRole('tab', { name: /^flat$/i })).toHaveAttribute('aria-selected', 'true')
+  await user.click(screen.getByRole('tab', { name: /^kanban$/i }))
+  await user.click(screen.getByRole('tab', { name: /^list$/i }))
+  expect(screen.getByRole('tab', { name: /^flat$/i })).toHaveAttribute('aria-selected', 'true')
+})

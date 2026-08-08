@@ -13,18 +13,19 @@ function makeCtx(tasks: TaskWithAssignees[]) {
     project: null, members: [], loading: false,
     selectedTaskId: null, setSelectedTaskId: vi.fn(),
     milestones: [milestone],
-    tasks: { 10: tasks },
+    tasks,
     addMilestone: vi.fn(), updateMilestone: vi.fn(),
     deleteMilestone: vi.fn(), reorderMilestone: vi.fn(),
     addTask: vi.fn(), updateTask: vi.fn(),
     deleteTask: vi.fn(), reorderTask: vi.fn(),
     assignUser: vi.fn(), unassignUser: vi.fn(),
+    addMember: vi.fn(), removeMember: vi.fn(), updateMemberRole: vi.fn(),
   }
 }
 
 function makeTask(id: number, title: string, status: string): TaskWithAssignees {
   return {
-    id, milestone_id: 10, title, description: null,
+    id, project_id: 1, milestone_id: 10, title, description: null,
     status, priority: 'normal', due_date: null,
     sort_order: id, created_by: 1, created_at: null, updated_at: null, assignees: [],
   }
@@ -67,4 +68,14 @@ test('omits cancelled tasks', () => {
     </ProjectContext.Provider>
   )
   expect(screen.queryByText('Cancelled Task')).not.toBeInTheDocument()
+})
+
+test('renders a task with no milestone without crashing', () => {
+  const task: TaskWithAssignees = { ...makeTask(5, 'Unsorted task', 'todo'), milestone_id: null }
+  render(
+    <ProjectContext.Provider value={makeCtx([task])}>
+      <KanbanBoard />
+    </ProjectContext.Provider>
+  )
+  expect(screen.getByText('Unsorted task')).toBeInTheDocument()
 })

@@ -35,7 +35,9 @@ function ProjectContent() {
   }
 
   function setView(v: ViewType) {
-    setSearchParams({ view: v })
+    const next = new URLSearchParams(searchParams)
+    next.set('view', v)
+    setSearchParams(next)
   }
 
   return (

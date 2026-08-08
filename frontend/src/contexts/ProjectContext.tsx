@@ -7,7 +7,7 @@ interface ProjectContextType {
   project: ProjectDetail | null
   projectId: number
   milestones: MilestoneSummary[]
-  tasks: Record<number, TaskWithAssignees[]>
+  tasks: TaskWithAssignees[]
   members: ProjectMember[]
   loading: boolean
   selectedTaskId: number | null
@@ -16,12 +16,12 @@ interface ProjectContextType {
   updateMilestone: (id: number, input: UpdateMilestoneInput) => Promise<void>
   deleteMilestone: (id: number) => Promise<void>
   reorderMilestone: (id: number, sortOrder: number) => Promise<void>
-  addTask: (milestoneId: number, input: CreateTaskInput) => Promise<void>
-  updateTask: (id: number, milestoneId: number, input: UpdateTaskInput) => Promise<void>
-  deleteTask: (id: number, milestoneId: number) => Promise<void>
-  reorderTask: (id: number, fromMilestoneId: number, toMilestoneId: number, sortOrder: number) => Promise<void>
-  assignUser: (taskId: number, milestoneId: number, userId: number) => Promise<void>
-  unassignUser: (taskId: number, milestoneId: number, userId: number) => Promise<void>
+  addTask: (input: CreateTaskInput) => Promise<void>
+  updateTask: (id: number, input: UpdateTaskInput) => Promise<void>
+  deleteTask: (id: number) => Promise<void>
+  reorderTask: (id: number, sortOrder: number, scoped: boolean) => Promise<void>
+  assignUser: (taskId: number, userId: number) => Promise<void>
+  unassignUser: (taskId: number, userId: number) => Promise<void>
   addMember: (member: ProjectMember) => Promise<void>
   removeMember: (userId: number) => Promise<void>
   updateMemberRole: (userId: number, role: string) => Promise<void>
@@ -38,7 +38,7 @@ export function ProjectProvider({
 }) {
   const [project, setProject] = useState<ProjectDetail | null>(null)
   const [milestones, setMilestones] = useState<MilestoneSummary[]>([])
-  const [tasks, setTasks] = useState<Record<number, TaskWithAssignees[]>>({})
+  const [tasks, setTasks] = useState<TaskWithAssignees[]>([])
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
@@ -47,23 +47,18 @@ export function ProjectProvider({
     Promise.all([
       projectsApi.get(projectId),
       projectsApi.listMembers(projectId),
-    ]).then(async ([proj, mems]) => {
+      tasksApi.list(projectId),
+    ]).then(([proj, mems, taskList]) => {
       setProject(proj)
       setMembers(mems)
       setMilestones(proj.milestones)
-      const taskArrays = await Promise.all(
-        proj.milestones.map(m => tasksApi.list(m.id))
-      )
-      const taskMap: Record<number, TaskWithAssignees[]> = {}
-      proj.milestones.forEach((m, i) => { taskMap[m.id] = taskArrays[i] })
-      setTasks(taskMap)
+      setTasks(taskList)
     }).finally(() => setLoading(false))
   }, [projectId])
 
   async function addMilestone(input: CreateMilestoneInput) {
     const m = await milestonesApi.create(projectId, input)
     setMilestones(prev => [...prev, m])
-    setTasks(prev => ({ ...prev, [m.id]: [] }))
   }
 
   async function updateMilestone(id: number, input: UpdateMilestoneInput) {
@@ -74,11 +69,9 @@ export function ProjectProvider({
   async function deleteMilestone(id: number) {
     await milestonesApi.delete(id)
     setMilestones(prev => prev.filter(m => m.id !== id))
-    setTasks(prev => {
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
+    // The backend untags rather than deletes this milestone's tasks
+    // (ON DELETE SET NULL) — mirror that locally instead of removing them.
+    setTasks(prev => prev.map(t => t.milestone_id === id ? { ...t, milestone_id: null } : t))
   }
 
   async function reorderMilestone(id: number, sortOrder: number) {
@@ -86,69 +79,42 @@ export function ProjectProvider({
     setMilestones(updated.slice().sort((a, b) => a.sort_order - b.sort_order))
   }
 
-  async function addTask(milestoneId: number, input: CreateTaskInput) {
-    const t = await tasksApi.create(milestoneId, input)
-    setTasks(prev => ({ ...prev, [milestoneId]: [...(prev[milestoneId] ?? []), t] }))
+  async function addTask(input: CreateTaskInput) {
+    const t = await tasksApi.create(projectId, input)
+    setTasks(prev => [...prev, t])
   }
 
-  async function updateTask(id: number, milestoneId: number, input: UpdateTaskInput) {
+  async function updateTask(id: number, input: UpdateTaskInput) {
     const updated = await tasksApi.update(id, input)
-    setTasks(prev => ({
-      ...prev,
-      [milestoneId]: (prev[milestoneId] ?? []).map(t => t.id === id ? updated : t),
-    }))
+    setTasks(prev => prev.map(t => t.id === id ? updated : t))
   }
 
-  async function deleteTask(id: number, milestoneId: number) {
+  async function deleteTask(id: number) {
     await tasksApi.delete(id)
-    setTasks(prev => ({
-      ...prev,
-      [milestoneId]: (prev[milestoneId] ?? []).filter(t => t.id !== id),
-    }))
+    setTasks(prev => prev.filter(t => t.id !== id))
   }
 
-  async function reorderTask(
-    id: number,
-    fromMilestoneId: number,
-    toMilestoneId: number,
-    sortOrder: number,
-  ) {
-    const updated = await tasksApi.reorder(id, toMilestoneId, sortOrder)
-    if (fromMilestoneId === toMilestoneId) {
-      setTasks(prev => ({
-        ...prev,
-        [fromMilestoneId]: (prev[fromMilestoneId] ?? [])
-          .map(t => t.id === id ? updated : t)
-          .sort((a, b) => a.sort_order - b.sort_order),
-      }))
-    } else {
-      setTasks(prev => ({
-        ...prev,
-        [fromMilestoneId]: (prev[fromMilestoneId] ?? []).filter(t => t.id !== id),
-        [toMilestoneId]: [...(prev[toMilestoneId] ?? []), updated]
-          .sort((a, b) => a.sort_order - b.sort_order),
-      }))
-    }
+  async function reorderTask(id: number, sortOrder: number, scoped: boolean) {
+    const affected = await tasksApi.reorder(id, sortOrder, scoped)
+    const affectedIds = new Set(affected.map(t => t.id))
+    setTasks(prev => [
+      ...prev.filter(t => !affectedIds.has(t.id)),
+      ...affected,
+    ].sort((a, b) => a.sort_order - b.sort_order))
   }
 
-  async function assignUser(taskId: number, milestoneId: number, userId: number) {
+  async function assignUser(taskId: number, userId: number) {
     const updated = await tasksApi.assign(taskId, userId)
-    setTasks(prev => ({
-      ...prev,
-      [milestoneId]: (prev[milestoneId] ?? []).map(t => t.id === taskId ? updated : t),
-    }))
+    setTasks(prev => prev.map(t => t.id === taskId ? updated : t))
   }
 
-  async function unassignUser(taskId: number, milestoneId: number, userId: number) {
+  async function unassignUser(taskId: number, userId: number) {
     await tasksApi.unassign(taskId, userId)
-    setTasks(prev => ({
-      ...prev,
-      [milestoneId]: (prev[milestoneId] ?? []).map(t =>
-        t.id === taskId
-          ? { ...t, assignees: t.assignees.filter(a => a.user_id !== userId) }
-          : t
-      ),
-    }))
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, assignees: t.assignees.filter(a => a.user_id !== userId) }
+        : t
+    ))
   }
 
   async function addMember(member: ProjectMember) {

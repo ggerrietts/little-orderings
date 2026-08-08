@@ -15,9 +15,7 @@ export default function KanbanBoard() {
   const { milestones, tasks, setSelectedTaskId, updateTask } = useProject()
   const sensors = useSensors(useSensor(PointerSensor))
 
-  const allTasks: TaskWithAssignees[] = Object.values(tasks)
-    .flat()
-    .filter(t => t.status !== 'cancelled')
+  const allTasks: TaskWithAssignees[] = tasks.filter(t => t.status !== 'cancelled')
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -26,13 +24,13 @@ export default function KanbanBoard() {
     const newStatus = String(over.id)
     const task = allTasks.find(t => t.id === taskId)
     if (!task || task.status === newStatus) return
-    await updateTask(taskId, task.milestone_id, {
-      status: newStatus as Parameters<typeof updateTask>[2]['status'],
+    await updateTask(taskId, {
+      status: newStatus as Parameters<typeof updateTask>[1]['status'],
     })
   }
 
   function milestoneFor(task: TaskWithAssignees) {
-    return milestones.find(m => m.id === task.milestone_id)
+    return task.milestone_id != null ? milestones.find(m => m.id === task.milestone_id) : undefined
   }
 
   return (

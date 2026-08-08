@@ -10,7 +10,7 @@ const milestone: MilestoneSummary = {
   target_date: null, due_date: null, sort_order: 0, task_count: 1,
 }
 const task: TaskWithAssignees = {
-  id: 100, milestone_id: 10, title: 'Build login', description: 'Some details',
+  id: 100, project_id: 1, milestone_id: 10, title: 'Build login', description: 'Some details',
   status: 'todo', priority: 'normal', due_date: null,
   sort_order: 0, created_by: 1, created_at: null, updated_at: null, assignees: [],
 }
@@ -18,13 +18,14 @@ const task: TaskWithAssignees = {
 function makeCtx(overrides: Record<string, unknown> = {}) {
   return {
     project: null, members: [], loading: false,
-    milestones: [milestone], tasks: { 10: [task] },
+    milestones: [milestone], tasks: [task],
     selectedTaskId: 100, setSelectedTaskId: vi.fn(),
     addMilestone: vi.fn(), updateMilestone: vi.fn(),
     deleteMilestone: vi.fn(), reorderMilestone: vi.fn(),
     addTask: vi.fn(), updateTask: vi.fn(),
     deleteTask: vi.fn(), reorderTask: vi.fn(),
     assignUser: vi.fn(), unassignUser: vi.fn(),
+    addMember: vi.fn(), removeMember: vi.fn(), updateMemberRole: vi.fn(),
     ...overrides,
   }
 }
@@ -48,7 +49,19 @@ test('changing status select calls updateTask', async () => {
     </ProjectContext.Provider>
   )
   await user.selectOptions(screen.getByLabelText(/status/i), 'blocked')
-  expect(updateTask).toHaveBeenCalledWith(100, 10, { status: 'blocked' })
+  expect(updateTask).toHaveBeenCalledWith(100, { status: 'blocked' })
+})
+
+test('changing milestone select to "No milestone" clears it', async () => {
+  const user = userEvent.setup()
+  const updateTask = vi.fn().mockResolvedValue(undefined)
+  render(
+    <ProjectContext.Provider value={makeCtx({ updateTask })}>
+      <TaskDetailModal />
+    </ProjectContext.Provider>
+  )
+  await user.selectOptions(screen.getByLabelText(/milestone/i), '')
+  expect(updateTask).toHaveBeenCalledWith(100, { milestone_id: null })
 })
 
 test('pressing Escape closes the modal', async () => {
@@ -74,6 +87,6 @@ test('delete button calls deleteTask and closes modal', async () => {
   )
   await user.click(screen.getByRole('button', { name: /delete task/i }))
   await user.click(screen.getByRole('button', { name: /^delete$/i }))
-  await waitFor(() => expect(deleteTask).toHaveBeenCalledWith(100, 10))
+  await waitFor(() => expect(deleteTask).toHaveBeenCalledWith(100))
   expect(setSelectedTaskId).toHaveBeenCalledWith(null)
 })

@@ -303,7 +303,9 @@ pub struct Task {
     #[cfg_attr(test, ts(type = "number"))]
     pub id: i64,
     #[cfg_attr(test, ts(type = "number"))]
-    pub milestone_id: i64,
+    pub project_id: i64,
+    #[cfg_attr(test, ts(type = "number | null"))]
+    pub milestone_id: Option<i64>,
     pub title: String,
     pub description: Option<String>,
     pub status: String,
@@ -342,6 +344,7 @@ pub struct CreateTaskRequest {
     pub description: Option<String>,
     pub priority: Option<TaskPriority>,
     pub due_date: Option<String>,
+    pub milestone_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -353,6 +356,8 @@ pub struct UpdateTaskRequest {
     pub priority: Option<TaskPriority>,
     #[serde(default)]
     pub due_date: Patch<String>,
+    #[serde(default)]
+    pub milestone_id: Patch<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -362,8 +367,9 @@ pub struct AssignRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct ReorderTaskRequest {
-    pub milestone_id: i64,
     pub sort_order: i64,
+    #[serde(default)]
+    pub scoped: bool,
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────

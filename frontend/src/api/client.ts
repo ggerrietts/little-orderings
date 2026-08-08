@@ -180,6 +180,7 @@ export type CreateTaskInput = {
   description?: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   due_date?: string;
+  milestone_id?: number;
 };
 export type UpdateTaskInput = {
   title?: string;
@@ -187,14 +188,15 @@ export type UpdateTaskInput = {
   status?: 'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   due_date?: string | null;
+  milestone_id?: number | null;
 };
 
 export const tasks = {
-  list: (milestoneId: number) =>
-    request<TaskWithAssignees[]>(`/api/milestones/${milestoneId}/tasks`),
+  list: (projectId: number) =>
+    request<TaskWithAssignees[]>(`/api/projects/${projectId}/tasks`),
 
-  create: (milestoneId: number, input: CreateTaskInput) =>
-    request<TaskWithAssignees>(`/api/milestones/${milestoneId}/tasks`, {
+  create: (projectId: number, input: CreateTaskInput) =>
+    request<TaskWithAssignees>(`/api/projects/${projectId}/tasks`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),
@@ -217,10 +219,10 @@ export const tasks = {
   unassign: (id: number, userId: number) =>
     request<void>(`/api/tasks/${id}/assign/${userId}`, { method: 'DELETE' }),
 
-  reorder: (id: number, milestoneId: number, sortOrder: number) =>
-    request<TaskWithAssignees>(`/api/tasks/${id}/reorder`, {
+  reorder: (id: number, sortOrder: number, scoped: boolean) =>
+    request<TaskWithAssignees[]>(`/api/tasks/${id}/reorder`, {
       method: 'PATCH',
-      body: JSON.stringify({ milestone_id: milestoneId, sort_order: sortOrder }),
+      body: JSON.stringify({ sort_order: sortOrder, scoped }),
     }),
 };
 

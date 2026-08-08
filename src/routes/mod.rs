@@ -61,7 +61,7 @@ pub fn api_router() -> Router<AppState> {
         .route("/milestones/:id/reorder", patch(milestones::reorder_milestone))
         // Tasks
         .route(
-            "/milestones/:id/tasks",
+            "/projects/:id/tasks",
             get(tasks::list_tasks).post(tasks::create_task),
         )
         .route(

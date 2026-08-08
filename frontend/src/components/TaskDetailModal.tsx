@@ -6,13 +6,13 @@ export function TaskDetailModal() {
   const {
     selectedTaskId, setSelectedTaskId,
     milestones, tasks, members,
-    updateTask, deleteTask, reorderTask, assignUser, unassignUser,
+    updateTask, deleteTask, assignUser, unassignUser,
   } = useProject()
 
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const task = selectedTaskId != null
-    ? Object.values(tasks).flat().find(t => t.id === selectedTaskId) ?? null
+    ? tasks.find(t => t.id === selectedTaskId) ?? null
     : null
 
   useEffect(() => {
@@ -29,10 +29,8 @@ export function TaskDetailModal() {
 
   if (!task) return null
 
-  const milestoneId = task.milestone_id
-
   async function handleDelete() {
-    await deleteTask(task!.id, milestoneId)
+    await deleteTask(task!.id)
     setSelectedTaskId(null)
   }
 
@@ -63,7 +61,7 @@ export function TaskDetailModal() {
             defaultValue={task.title}
             onBlur={e => {
               if (e.target.value.trim() && e.target.value.trim() !== task.title) {
-                updateTask(task.id, milestoneId, { title: e.target.value.trim() })
+                updateTask(task.id, { title: e.target.value.trim() })
               }
             }}
             className="w-full bg-transparent text-text text-lg font-semibold border-b border-border focus:outline-none focus:border-accent pb-1"
@@ -73,7 +71,7 @@ export function TaskDetailModal() {
           <textarea
             aria-label="Description"
             defaultValue={task.description ?? ''}
-            onBlur={e => updateTask(task.id, milestoneId, {
+            onBlur={e => updateTask(task.id, {
               description: e.target.value || null,
             })}
             rows={3}
@@ -88,8 +86,8 @@ export function TaskDetailModal() {
               <select
                 aria-label="Status"
                 value={task.status}
-                onChange={e => updateTask(task.id, milestoneId, {
-                  status: e.target.value as Parameters<typeof updateTask>[2]['status'],
+                onChange={e => updateTask(task.id, {
+                  status: e.target.value as Parameters<typeof updateTask>[1]['status'],
                 })}
                 className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
               >
@@ -106,8 +104,8 @@ export function TaskDetailModal() {
               <select
                 aria-label="Priority"
                 value={task.priority}
-                onChange={e => updateTask(task.id, milestoneId, {
-                  priority: e.target.value as Parameters<typeof updateTask>[2]['priority'],
+                onChange={e => updateTask(task.id, {
+                  priority: e.target.value as Parameters<typeof updateTask>[1]['priority'],
                 })}
                 className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
               >
@@ -126,7 +124,7 @@ export function TaskDetailModal() {
               type="date"
               aria-label="Due date"
               defaultValue={task.due_date ?? ''}
-              onChange={e => updateTask(task.id, milestoneId, {
+              onChange={e => updateTask(task.id, {
                 due_date: e.target.value || null,
               })}
               className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
@@ -138,15 +136,14 @@ export function TaskDetailModal() {
             <span className="text-xs text-muted block mb-1">Milestone</span>
             <select
               aria-label="Milestone"
-              value={task.milestone_id}
+              value={task.milestone_id ?? ''}
               onChange={e => {
-                const toId = Number(e.target.value)
-                if (toId !== task.milestone_id) {
-                  reorderTask(task.id, task.milestone_id, toId, 0)
-                }
+                const raw = e.target.value
+                updateTask(task.id, { milestone_id: raw === '' ? null : Number(raw) })
               }}
               className="w-full bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
             >
+              <option value="">No milestone</option>
               {milestones.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
@@ -164,7 +161,7 @@ export function TaskDetailModal() {
                 >
                   {a.username}
                   <button
-                    onClick={() => unassignUser(task.id, milestoneId, a.user_id)}
+                    onClick={() => unassignUser(task.id, a.user_id)}
                     className="text-muted hover:text-text ml-1"
                     aria-label={`Remove ${a.username}`}
                   >
@@ -178,7 +175,7 @@ export function TaskDetailModal() {
                 aria-label="Assign user"
                 value=""
                 onChange={e => {
-                  if (e.target.value) assignUser(task.id, milestoneId, Number(e.target.value))
+                  if (e.target.value) assignUser(task.id, Number(e.target.value))
                 }}
                 className="bg-canvas text-text text-sm rounded-lg px-3 py-2 border border-border focus:outline-none focus:border-accent"
               >
