@@ -1,10 +1,12 @@
 pub mod helpers;
 pub mod milestones;
 pub mod projects;
+pub mod push_subscriptions;
 pub mod tasks;
+pub mod watches;
 
 use axum::{
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 
@@ -17,6 +19,11 @@ pub fn api_router() -> Router<AppState> {
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
+        // Push subscriptions
+        .route(
+            "/push-subscriptions",
+            post(push_subscriptions::create_subscription).delete(push_subscriptions::delete_subscription),
+        )
         // Projects
         .route(
             "/projects",
@@ -35,6 +42,10 @@ pub fn api_router() -> Router<AppState> {
         .route(
             "/projects/:id/members/:user_id",
             delete(projects::remove_member),
+        )
+        .route(
+            "/projects/:id/watch",
+            put(watches::set_watch).delete(watches::delete_watch),
         )
         // Milestones
         .route(

@@ -89,6 +89,14 @@ pub async fn create_milestone(
     let milestone_id = result.last_insert_rowid();
     tx.commit().await?;
 
+    crate::notifications::notify_watchers(
+        &state.pool,
+        project_id,
+        crate::models::Tier::Milestones,
+        user.id,
+    )
+    .await;
+
     let milestone = fetch_milestone(&state.pool, milestone_id).await?;
     Ok((StatusCode::CREATED, Json(milestone)))
 }
@@ -129,6 +137,14 @@ pub async fn update_milestone(
     qb.push(" WHERE id = ").push_bind(milestone_id);
     qb.build().execute(&state.pool).await?;
 
+    crate::notifications::notify_watchers(
+        &state.pool,
+        project_id,
+        crate::models::Tier::Milestones,
+        user.id,
+    )
+    .await;
+
     Ok(Json(fetch_milestone(&state.pool, milestone_id).await?))
 }
 
@@ -144,6 +160,14 @@ pub async fn delete_milestone(
         .bind(milestone_id)
         .execute(&state.pool)
         .await?;
+
+    crate::notifications::notify_watchers(
+        &state.pool,
+        project_id,
+        crate::models::Tier::Milestones,
+        user.id,
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }

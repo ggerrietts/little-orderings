@@ -86,6 +86,37 @@ export const projects = {
     request<void>(`/api/projects/${id}/members/${userId}`, { method: 'DELETE' }),
 };
 
+export const watches = {
+  set: (projectId: number, tier: 'task_milestones' | 'milestones' | 'all') =>
+    request<void>(`/api/projects/${projectId}/watch`, {
+      method: 'PUT',
+      body: JSON.stringify({ tier }),
+    }),
+
+  remove: (projectId: number) =>
+    request<void>(`/api/projects/${projectId}/watch`, { method: 'DELETE' }),
+};
+
+export type PushSubscriptionInput = {
+  endpoint: string
+  p256dh_key: string
+  auth_key: string
+};
+
+export const pushSubscriptions = {
+  create: (subscription: PushSubscriptionInput) =>
+    request<void>('/api/push-subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(subscription),
+    }),
+
+  remove: (endpoint: string) =>
+    request<void>('/api/push-subscriptions', {
+      method: 'DELETE',
+      body: JSON.stringify({ endpoint }),
+    }),
+};
+
 // ── Milestones ────────────────────────────────────────────────────────────────
 
 export type CreateMilestoneInput = {

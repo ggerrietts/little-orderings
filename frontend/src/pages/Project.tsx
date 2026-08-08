@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ProjectProvider, useProject } from '../contexts/ProjectContext'
 import ListView from '../components/ListView'
 import KanbanBoard from '../components/KanbanBoard'
 import { TaskDetailModal } from '../components/TaskDetailModal'
+import { InstallLink } from '../components/InstallLink'
+import { WatchToggle } from '../components/WatchToggle'
 
 type ViewType = 'list' | 'kanban'
 
@@ -14,7 +17,12 @@ const VIEWS: { id: ViewType; label: string }[] = [
 function ProjectContent() {
   const [searchParams, setSearchParams] = useSearchParams()
   const view = (searchParams.get('view') ?? 'list') as ViewType
-  const { project, loading, selectedTaskId } = useProject()
+  const { project, projectId, loading, selectedTaskId } = useProject()
+  const [watchTier, setWatchTier] = useState<string | null>(null)
+
+  useEffect(() => {
+    setWatchTier(project?.my_watch_tier ?? null)
+  }, [project])
 
   if (loading) {
     return (
@@ -32,9 +40,15 @@ function ProjectContent() {
     <div className="min-h-screen bg-canvas">
       <div className="px-8 py-6 border-b border-border">
         <div className="max-w-6xl mx-auto">
-          <Link to="/" className="text-sm text-muted hover:text-accent-muted transition-colors inline-block mb-3">
-            ← All Projects
-          </Link>
+          <div className="flex items-center justify-between mb-3">
+            <Link to="/" className="text-sm text-muted hover:text-accent-muted transition-colors inline-block">
+              ← All Projects
+            </Link>
+            <div className="flex items-center gap-3">
+              <WatchToggle projectId={projectId} currentTier={watchTier} onChange={setWatchTier} />
+              <InstallLink />
+            </div>
+          </div>
           <h1 className="text-2xl font-semibold text-text mb-1">{project?.name}</h1>
           {project?.description != null && (
             <p className="text-muted text-sm mb-3">{project.description}</p>

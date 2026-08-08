@@ -106,7 +106,29 @@ pub async fn get_project(
     .fetch_all(&state.pool)
     .await?;
 
-    Ok(Json(ProjectDetail { project, milestones }))
+    let watch: Option<(String,)> =
+        sqlx::query_as("SELECT tier FROM project_watches WHERE project_id = ? AND user_id = ?")
+            .bind(project_id)
+            .bind(user.id)
+            .fetch_optional(&state.pool)
+            .await?;
+
+    // Opening this project acknowledges any pending notification for it —
+    // re-arms the watch so the next matching change notifies again (spec §4).
+    sqlx::query(
+        "UPDATE project_watches SET notified_at = NULL
+         WHERE project_id = ? AND user_id = ? AND notified_at IS NOT NULL",
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(ProjectDetail {
+        project,
+        milestones,
+        my_watch_tier: watch.map(|(t,)| t),
+    }))
 }
 
 pub async fn update_project(
@@ -147,6 +169,8 @@ pub async fn update_project(
     .fetch_one(&state.pool)
     .await?;
 
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
+
     Ok(Json(project))
 }
 
@@ -163,6 +187,8 @@ pub async fn archive_project(
     .bind(project_id)
     .execute(&state.pool)
     .await?;
+
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -217,6 +243,8 @@ pub async fn add_member(
         }
     })?;
 
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
+
     Ok(StatusCode::CREATED)
 }
 
@@ -257,6 +285,8 @@ pub async fn remove_member(
             AppError::NotFound
         });
     }
+
+    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::NO_CONTENT)
 }

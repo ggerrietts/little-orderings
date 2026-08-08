@@ -116,6 +116,35 @@ impl TaskPriority {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum Tier {
+    TaskMilestones,
+    Milestones,
+    All,
+}
+
+impl Tier {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Tier::TaskMilestones => "task_milestones",
+            Tier::Milestones => "milestones",
+            Tier::All => "all",
+        }
+    }
+
+    pub fn from_str_opt(s: &str) -> Option<Tier> {
+        match s {
+            "task_milestones" => Some(Tier::TaskMilestones),
+            "milestones" => Some(Tier::Milestones),
+            "all" => Some(Tier::All),
+            _ => None,
+        }
+    }
+}
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -151,7 +180,7 @@ pub struct ProjectListItem {
     pub open_task_count: i64,
 }
 
-/// Detail view: project + its milestones.
+/// Detail view: project + its milestones + the caller's own watch state.
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -159,6 +188,7 @@ pub struct ProjectDetail {
     #[serde(flatten)]
     pub project: Project,
     pub milestones: Vec<MilestoneSummary>,
+    pub my_watch_tier: Option<String>,
 }
 
 /// Milestone row returned inside a project detail response.
@@ -211,6 +241,25 @@ pub struct UpdateProjectRequest {
 pub struct AddMemberRequest {
     pub user_id: i64,
     pub role: Option<String>,
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct SetWatchRequest {
+    pub tier: Tier,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreatePushSubscriptionRequest {
+    pub endpoint: String,
+    pub p256dh_key: String,
+    pub auth_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeletePushSubscriptionRequest {
+    pub endpoint: String,
 }
 
 // ── Milestones ────────────────────────────────────────────────────────────────
@@ -350,6 +399,7 @@ mod type_export {
         MilestoneStatus::export_all_to(dir).unwrap();
         TaskStatus::export_all_to(dir).unwrap();
         TaskPriority::export_all_to(dir).unwrap();
+        Tier::export_all_to(dir).unwrap();
 
         // Response structs (export_all_to also exports transitive dependencies)
         User::export_all_to(dir).unwrap();
