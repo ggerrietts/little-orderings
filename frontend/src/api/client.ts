@@ -10,22 +10,33 @@ class ApiError extends Error {
   }
 }
 
+let pendingRequestCount = 0;
+
+export function hasPendingRequests(): boolean {
+  return pendingRequestCount > 0;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? res.statusText);
+  pendingRequestCount++;
+  try {
+    const res = await fetch(path, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    // Some success responses (204 No Content, or 201 Created with no body,
+    // e.g. add_member/create_subscription) have nothing to parse — checking
+    // for an empty body directly is more robust than special-casing 204,
+    // since it's the actual body that's empty, not just that status code.
+    const text = await res.text();
+    return text ? JSON.parse(text) : (undefined as T);
+  } finally {
+    pendingRequestCount--;
   }
-  // Some success responses (204 No Content, or 201 Created with no body,
-  // e.g. add_member/create_subscription) have nothing to parse — checking
-  // for an empty body directly is more robust than special-casing 204,
-  // since it's the actual body that's empty, not just that status code.
-  const text = await res.text();
-  return text ? JSON.parse(text) : (undefined as T);
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────

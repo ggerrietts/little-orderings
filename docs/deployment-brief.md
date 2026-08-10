@@ -60,7 +60,7 @@ mostly don't apply once deployed — see §8.
    macros can validate queries, then `cargo build --release`
 3. **Runtime** (`debian:bookworm-slim`) — copies the binary and `frontend/dist`,
    installs only `libsqlite3-0` + `ca-certificates`, sets `HOST=0.0.0.0`, `PORT=3000`,
-   `DATABASE_URL=sqlite:/data/todo.db`, `FRONTEND_DIST=/app/frontend/dist`
+   `DATABASE_URL=sqlite:/data/todo.db`, `FRONTEND_DIST=/app/frontend/dist`, `GIT_SHA=<build arg>`
 
 Already true, no action needed:
 - ✅ `debian:bookworm-slim` runtime (not `scratch`/musl) — matches this doc's original

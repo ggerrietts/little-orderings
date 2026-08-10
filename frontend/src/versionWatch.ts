@@ -1,7 +1,9 @@
-import { version } from './api/client'
+import { hasPendingRequests, version } from './api/client'
 import { BUILD_VERSION } from './config'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000
+const RELOAD_WAIT_CAP_MS = 5000
+const RELOAD_POLL_INTERVAL_MS = 100
 
 export function createVersionWatch() {
   let stale = false
@@ -38,9 +40,22 @@ export function createVersionWatch() {
 
   function handleClick(event: MouseEvent) {
     if (!stale) return
-    const target = event.target as HTMLElement | null
-    if (target?.closest('input, textarea, [contenteditable]')) return
-    window.location.reload()
+    const target = event.target
+    if (!(target instanceof Element)) return
+    if (target.closest('input, textarea, [contenteditable]')) return
+    reloadWhenIdle()
+  }
+
+  function reloadWhenIdle() {
+    const deadline = Date.now() + RELOAD_WAIT_CAP_MS
+    const poll = () => {
+      if (!hasPendingRequests() || Date.now() >= deadline) {
+        window.location.reload()
+        return
+      }
+      setTimeout(poll, RELOAD_POLL_INTERVAL_MS)
+    }
+    poll()
   }
 
   function start() {
