@@ -16,12 +16,19 @@ beforeEach(() => {
   vi.resetAllMocks()
   mockVersionGet.mockResolvedValue({ version: 'dev' })
   Object.defineProperty(document, 'hidden', { value: false, configurable: true })
+  // jsdom defines window.location's own properties (reload, assign, replace,
+  // href, ...) as non-configurable, which makes `vi.spyOn(window.location,
+  // 'reload')` throw "Cannot redefine property: reload". Stub `location`
+  // with a plain clone (configurable properties) scoped to this file's
+  // tests via vi.stubGlobal, restored by vi.unstubAllGlobals() below.
+  vi.stubGlobal('location', { ...window.location, reload: vi.fn() })
 })
 
 afterEach(() => {
   watch?.stop()
   watch = undefined
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 test('checks the version immediately on start', async () => {
