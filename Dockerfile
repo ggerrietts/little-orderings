@@ -2,12 +2,12 @@ ARG GIT_SHA=dev
 
 # Stage 1: Build the React frontend
 FROM node:22-alpine AS frontend-builder
-ARG GIT_SHA
-ENV VITE_GIT_SHA=$GIT_SHA
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+ARG GIT_SHA
+ENV VITE_GIT_SHA=$GIT_SHA
 RUN npm run build
 
 # Stage 2: Build the Rust backend
