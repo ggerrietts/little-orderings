@@ -1,4 +1,4 @@
-import type { Assignee, MilestoneSummary, Project, ProjectDetail, ProjectListItem, ProjectMember, Task, TaskWithAssignees, User } from '../types';
+import type { Assignee, MilestoneSummary, Project, ProjectDetail, ProjectListItem, ProjectMember, Task, TaskWithAssignees, User, VersionResponse } from '../types';
 
 // ── Base fetch ────────────────────────────────────────────────────────────────
 
@@ -226,5 +226,11 @@ export const tasks = {
     }),
 };
 
+// ── Version ───────────────────────────────────────────────────────────────────
+
+export const version = {
+  get: () => request<VersionResponse>('/api/version'),
+};
+
 export { ApiError };
-export type { Project, ProjectListItem, ProjectDetail, ProjectMember, MilestoneSummary, Task, TaskWithAssignees, Assignee, User };
+export type { Project, ProjectListItem, ProjectDetail, ProjectMember, MilestoneSummary, Task, TaskWithAssignees, Assignee, User, VersionResponse };
