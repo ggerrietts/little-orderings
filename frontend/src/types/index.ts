@@ -13,3 +13,4 @@ export type { TaskPriority } from './TaskPriority';
 export type { TaskStatus } from './TaskStatus';
 export type { TaskWithAssignees } from './TaskWithAssignees';
 export type { User } from './User';
+export type { VersionResponse } from './VersionResponse';

@@ -28,6 +28,15 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Patch<T> {
     }
 }
 
+// ── Version ──────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct VersionResponse {
+    pub version: String,
+}
+
 // ── Status / priority enums ───────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -422,5 +431,6 @@ mod type_export {
         Task::export_all_to(dir).unwrap();
         Assignee::export_all_to(dir).unwrap();
         TaskWithAssignees::export_all_to(dir).unwrap();
+        VersionResponse::export_all_to(dir).unwrap();
     }
 }

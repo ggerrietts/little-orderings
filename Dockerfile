@@ -1,9 +1,13 @@
+ARG GIT_SHA=dev
+
 # Stage 1: Build the React frontend
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+ARG GIT_SHA
+ENV VITE_GIT_SHA=$GIT_SHA
 RUN npm run build
 
 # Stage 2: Build the Rust backend
@@ -39,10 +43,12 @@ COPY migrations/ migrations/
 # this path, so /data comes up writable by `app` on first run.
 RUN mkdir -p /data && chown app:app /data
 
+ARG GIT_SHA
 ENV DATABASE_URL=sqlite:/data/todo.db
 ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV FRONTEND_DIST=/app/frontend/dist
+ENV GIT_SHA=$GIT_SHA
 
 USER app
 EXPOSE 3000
