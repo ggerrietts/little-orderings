@@ -8,7 +8,7 @@ vi.mock('../api/client', async (importOriginal) => {
   const mod = await importOriginal<typeof client>()
   return {
     ...mod,
-    projects: { get: vi.fn(), listMembers: vi.fn() },
+    projects: { get: vi.fn(), listMembers: vi.fn(), update: vi.fn() },
     tasks: { list: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(),
              assign: vi.fn(), unassign: vi.fn(), reorder: vi.fn() },
     milestones: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), reorder: vi.fn() },
@@ -87,4 +87,37 @@ test('addTask appends to the correct milestone bucket', async () => {
   })
 
   expect(screen.getByTestId('count')).toHaveTextContent('2')
+})
+
+test('updateProject calls projects.update and merges the result without losing milestones', async () => {
+  mockProjects.get.mockResolvedValue(project)
+  mockProjects.listMembers.mockResolvedValue(members)
+  mockTasks.list.mockResolvedValue([task])
+  mockProjects.update.mockResolvedValue({
+    id: 1, name: 'Proj', description: null, status: 'archived',
+    target_date: null, created_at: null, updated_at: null,
+  })
+
+  function ArchiveConsumer() {
+    const ctx = useProject()
+    if (ctx.loading) return <div>loading</div>
+    return (
+      <div>
+        <div data-testid="status">{ctx.project?.status}</div>
+        <div data-testid="milestone-count">{ctx.milestones.length}</div>
+        <button onClick={() => ctx.updateProject({ status: 'archived' })}>archive</button>
+      </div>
+    )
+  }
+
+  render(<ProjectProvider projectId={1}><ArchiveConsumer /></ProjectProvider>)
+  await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('active'))
+
+  await act(async () => {
+    screen.getByRole('button', { name: 'archive' }).click()
+  })
+
+  await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('archived'))
+  expect(mockProjects.update).toHaveBeenCalledWith(1, { status: 'archived' })
+  expect(screen.getByTestId('milestone-count')).toHaveTextContent('1')
 })

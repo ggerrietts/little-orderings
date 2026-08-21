@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { projects as projectsApi, milestones as milestonesApi, tasks as tasksApi } from '../api/client'
-import type { CreateMilestoneInput, UpdateMilestoneInput, CreateTaskInput, UpdateTaskInput } from '../api/client'
+import type { CreateMilestoneInput, UpdateMilestoneInput, CreateTaskInput, UpdateTaskInput, UpdateProjectInput } from '../api/client'
 import type { ProjectDetail, MilestoneSummary, TaskWithAssignees, ProjectMember } from '../types'
 
 interface ProjectContextType {
@@ -12,6 +12,7 @@ interface ProjectContextType {
   loading: boolean
   selectedTaskId: number | null
   setSelectedTaskId: (id: number | null) => void
+  updateProject: (input: UpdateProjectInput) => Promise<void>
   addMilestone: (input: CreateMilestoneInput) => Promise<void>
   updateMilestone: (id: number, input: UpdateMilestoneInput) => Promise<void>
   deleteMilestone: (id: number) => Promise<void>
@@ -55,6 +56,11 @@ export function ProjectProvider({
       setTasks(taskList)
     }).finally(() => setLoading(false))
   }, [projectId])
+
+  async function updateProject(input: UpdateProjectInput) {
+    const updated = await projectsApi.update(projectId, input)
+    setProject(prev => (prev ? { ...prev, ...updated } : prev))
+  }
 
   async function addMilestone(input: CreateMilestoneInput) {
     const m = await milestonesApi.create(projectId, input)
@@ -136,6 +142,7 @@ export function ProjectProvider({
     <ProjectContext.Provider value={{
       project, projectId, milestones, tasks, members, loading,
       selectedTaskId, setSelectedTaskId,
+      updateProject,
       addMilestone, updateMilestone, deleteMilestone, reorderMilestone,
       addTask, updateTask, deleteTask, reorderTask,
       assignUser, unassignUser,

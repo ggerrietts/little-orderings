@@ -82,3 +82,49 @@ test('logout clears user and navigates', async () => {
   await user.click(screen.getByRole('button', { name: /sign out/i }))
   expect(setUser).toHaveBeenCalledWith(null)
 })
+
+test('hides archived projects by default', async () => {
+  const items: ProjectListItem[] = [
+    { id: 1, name: 'Alpha', description: null, status: 'active',
+      target_date: null, created_at: null, updated_at: null,
+      member_count: 1, open_task_count: 0 },
+    { id: 2, name: 'Camping Trip', description: null, status: 'archived',
+      target_date: null, created_at: null, updated_at: null,
+      member_count: 1, open_task_count: 0 },
+  ]
+  mockProjects.list.mockResolvedValue(items)
+  renderDashboard()
+  await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+  expect(screen.queryByText('Camping Trip')).not.toBeInTheDocument()
+})
+
+test('shows archived projects when "Show archived" is checked', async () => {
+  const user = userEvent.setup()
+  const items: ProjectListItem[] = [
+    { id: 1, name: 'Alpha', description: null, status: 'active',
+      target_date: null, created_at: null, updated_at: null,
+      member_count: 1, open_task_count: 0 },
+    { id: 2, name: 'Camping Trip', description: null, status: 'archived',
+      target_date: null, created_at: null, updated_at: null,
+      member_count: 1, open_task_count: 0 },
+  ]
+  mockProjects.list.mockResolvedValue(items)
+  renderDashboard()
+  await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+
+  await user.click(screen.getByRole('checkbox', { name: /show archived/i }))
+
+  expect(screen.getByText('Camping Trip')).toBeInTheDocument()
+})
+
+test('shows a filtered-empty message when every project is archived and the toggle is off', async () => {
+  const items: ProjectListItem[] = [
+    { id: 2, name: 'Camping Trip', description: null, status: 'archived',
+      target_date: null, created_at: null, updated_at: null,
+      member_count: 1, open_task_count: 0 },
+  ]
+  mockProjects.list.mockResolvedValue(items)
+  renderDashboard()
+  await waitFor(() => expect(screen.getByText(/no active projects/i)).toBeInTheDocument())
+  expect(screen.queryByText(/no projects yet/i)).not.toBeInTheDocument()
+})

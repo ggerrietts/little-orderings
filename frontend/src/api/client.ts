@@ -84,9 +84,6 @@ export const projects = {
       body: JSON.stringify(input),
     }),
 
-  archive: (id: number) =>
-    request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
-
   listMembers: (id: number) =>
     request<ProjectMember[]>(`/api/projects/${id}/members`),
 
