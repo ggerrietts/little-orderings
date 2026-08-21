@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const { setUser } = useAuth()
   const navigate = useNavigate()
 
@@ -35,6 +36,7 @@ export default function Dashboard() {
   }
 
   const today = startOfToday()
+  const visibleItems = items.filter(item => showArchived || item.status !== 'archived')
 
   if (loading) {
     return (
@@ -71,27 +73,44 @@ export default function Dashboard() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-semibold text-text">Your Projects</h1>
-            <button
-              onClick={() => setModalOpen(true)}
-              className="bg-accent hover:bg-accent-hover text-surface text-sm font-semibold rounded-lg px-4 py-2 transition-colors"
-            >
-              New Project
-            </button>
-          </div>
-
-          {items.length === 0 ? (
-            <div className="text-center py-20">
-              <p className="text-muted mb-4">No projects yet.</p>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={e => setShowArchived(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Show archived
+              </label>
               <button
                 onClick={() => setModalOpen(true)}
-                className="text-accent-muted hover:underline"
+                className="bg-accent hover:bg-accent-hover text-surface text-sm font-semibold rounded-lg px-4 py-2 transition-colors"
               >
-                Create your first project
+                New Project
               </button>
+            </div>
+          </div>
+
+          {visibleItems.length === 0 ? (
+            <div className="text-center py-20">
+              {items.length === 0 ? (
+                <>
+                  <p className="text-muted mb-4">No projects yet.</p>
+                  <button
+                    onClick={() => setModalOpen(true)}
+                    className="text-accent-muted hover:underline"
+                  >
+                    Create your first project
+                  </button>
+                </>
+              ) : (
+                <p className="text-muted">No active projects. Check "Show archived" to see archived projects.</p>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map(item => {
+              {visibleItems.map(item => {
                 const overdue =
                   item.target_date != null &&
                   isBefore(parseISO(item.target_date), today) &&
