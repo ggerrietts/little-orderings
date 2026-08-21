@@ -7,6 +7,7 @@ import { TaskDetailModal } from '../components/TaskDetailModal'
 import { InstallLink } from '../components/InstallLink'
 import { WatchToggle } from '../components/WatchToggle'
 import { MembersTab } from '../components/MembersTab'
+import { ArchiveControl } from '../components/ArchiveControl'
 
 type ViewType = 'list' | 'kanban' | 'members'
 
@@ -49,6 +50,7 @@ function ProjectContent() {
               ← All Projects
             </Link>
             <div className="flex items-center gap-3">
+              <ArchiveControl />
               <WatchToggle projectId={projectId} currentTier={watchTier} onChange={setWatchTier} />
               <InstallLink />
             </div>
