@@ -11,7 +11,7 @@ use crate::{
     error::AppError,
     models::{
         AddMemberRequest, CreateProjectRequest, MilestoneSummary, Patch, Project, ProjectDetail,
-        ProjectListItem, ProjectMember, UpdateMemberRoleRequest, UpdateProjectRequest,
+        ProjectListItem, ProjectMember, ProjectStatus, UpdateMemberRoleRequest, UpdateProjectRequest,
     },
     AppState,
 };
@@ -130,6 +130,10 @@ pub async fn get_project(
     }))
 }
 
+fn status_change_requires_owner(status: &Option<ProjectStatus>) -> bool {
+    status.is_some()
+}
+
 pub async fn update_project(
     AuthUser(user): AuthUser,
     State(state): State<AppState>,
@@ -137,6 +141,9 @@ pub async fn update_project(
     Json(payload): Json<UpdateProjectRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     crate::auth::require_writer(&state.pool, project_id, user.id).await?;
+    if status_change_requires_owner(&payload.status) {
+        crate::auth::require_owner(&state.pool, project_id, user.id).await?;
+    }
 
     let mut qb = QueryBuilder::<sqlx::Sqlite>::new(
         "UPDATE projects SET updated_at = CURRENT_TIMESTAMP",
@@ -171,25 +178,6 @@ pub async fn update_project(
     crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(Json(project))
-}
-
-pub async fn archive_project(
-    AuthUser(user): AuthUser,
-    State(state): State<AppState>,
-    Path(project_id): Path<i64>,
-) -> Result<impl IntoResponse, AppError> {
-    crate::auth::require_owner(&state.pool, project_id, user.id).await?;
-
-    sqlx::query(
-        "UPDATE projects SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    )
-    .bind(project_id)
-    .execute(&state.pool)
-    .await?;
-
-    crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
-
-    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn list_members(
@@ -336,4 +324,19 @@ pub async fn update_member_role(
     crate::notifications::notify_watchers(&state.pool, project_id, crate::models::Tier::All, user.id).await;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_change_requires_owner_true_when_status_present() {
+        assert!(status_change_requires_owner(&Some(ProjectStatus::Archived)));
+    }
+
+    #[test]
+    fn status_change_requires_owner_false_when_status_absent() {
+        assert!(!status_change_requires_owner(&None::<ProjectStatus>));
+    }
 }

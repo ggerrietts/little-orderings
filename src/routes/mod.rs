@@ -35,9 +35,7 @@ pub fn api_router() -> Router<AppState> {
         )
         .route(
             "/projects/:id",
-            get(projects::get_project)
-                .patch(projects::update_project)
-                .delete(projects::archive_project),
+            get(projects::get_project).patch(projects::update_project),
         )
         .route(
             "/projects/:id/members",
